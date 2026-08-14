@@ -58,6 +58,8 @@ namespace ArEnclosure.Placement
         [Header("Anchoring")]
         [SerializeField] bool m_AttachAnchor = true;
 
+        [SerializeField] Material m_ReferenceMaterial;
+
         public event Action<PlacementReport> Placed;
         public event Action Cleared;
 
@@ -79,11 +81,12 @@ namespace ArEnclosure.Placement
             if (m_RaycastManager == null) m_RaycastManager = FindAnyObjectByType<ARRaycastManager>();
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
 
-            if (m_PlaneManager != null)
-            {
-                m_PlaneManager.requestedDetectionMode =
-                    PlaneDetectionMode.Horizontal | PlaneDetectionMode.Vertical;
-            }
+            //if (m_PlaneManager != null)
+            //{
+            //    m_PlaneManager.requestedDetectionMode =
+            //        PlaneDetectionMode.Horizontal | PlaneDetectionMode.Vertical;
+            //}
+            // commented to avoid overriding DetectionMode
         }
 
         void OnEnable()
@@ -305,6 +308,10 @@ namespace ArEnclosure.Placement
 
             var collider = m_Reference.GetComponent<Collider>();
             if (collider != null) Destroy(collider);
+
+            var rodRenderer = m_Reference.GetComponent<Renderer>();
+            if (m_ReferenceMaterial != null && rodRenderer != null)
+                rodRenderer.sharedMaterial = m_ReferenceMaterial;
 
             var side = rotation * Vector3.right;
             m_Reference.transform.position =
