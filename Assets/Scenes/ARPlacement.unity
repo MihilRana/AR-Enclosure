@@ -130,6 +130,8 @@ GameObject:
   - component: {fileID: 24247451}
   - component: {fileID: 24247452}
   - component: {fileID: 24247453}
+  - component: {fileID: 24247455}
+  - component: {fileID: 24247454}
   m_Layer: 0
   m_Name: Controllers
   m_TagString: Untagged
@@ -190,11 +192,45 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArEnclosure.Diagnostics.ScaleVerificationHUD
   m_Placement: {fileID: 24247452}
+  m_Manipulator: {fileID: 24247454}
+  m_Modes: {fileID: 24247455}
   m_XROrigin: {fileID: 1423645815}
   m_Readout: {fileID: 77849850}
   m_ToleranceMillimetres: 5
   m_WriteCsv: 1
   m_FileName: scale_verification.csv
+--- !u!114 &24247454
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 24247450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 779c2e0b6dd182845915040e4e327a39, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArEnclosure.Placement.PlacementManipulator
+  m_Placement: {fileID: 24247452}
+  m_RaycastManager: {fileID: 1423645817}
+  m_PlaneManager: {fileID: 1423645816}
+  m_XROrigin: {fileID: 1423645815}
+  m_Modes: {fileID: 24247455}
+  m_GrabMarginMetres: 0.25
+  m_MaximumDragDistance: 6
+--- !u!114 &24247455
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 24247450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e5590b2d11e8bd4d89e5505c5514e05, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArEnclosure.App.AppModeController
+  m_InitialMode: 0
 --- !u!1 &77849848
 GameObject:
   m_ObjectHideFlags: 0

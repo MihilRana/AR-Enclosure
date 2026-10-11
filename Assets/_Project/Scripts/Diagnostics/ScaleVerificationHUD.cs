@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using ArEnclosure.App;
 using ArEnclosure.Core;
 using ArEnclosure.Placement;
 using TMPro;
@@ -21,6 +22,8 @@ namespace ArEnclosure.Diagnostics
     {
         [Header("References")]
         [SerializeField] ARPlacementController m_Placement;
+        [SerializeField] PlacementManipulator m_Manipulator;
+        [SerializeField] AppModeController m_Modes;
         [SerializeField] XROrigin m_XROrigin;
         [SerializeField] TMP_Text m_Readout;
 
@@ -50,9 +53,15 @@ namespace ArEnclosure.Diagnostics
         float m_PlacementDistance;
         string m_CsvPath;
 
+        ManipulationReport m_LastMove;
+        bool m_HasLastMove;
+        int m_MoveCount;
+
         void Awake()
         {
             if (m_Placement == null) m_Placement = FindAnyObjectByType<ARPlacementController>();
+            if (m_Manipulator == null) m_Manipulator = FindAnyObjectByType<PlacementManipulator>();
+            if (m_Modes == null) m_Modes = FindAnyObjectByType<AppModeController>();
             if (m_XROrigin == null) m_XROrigin = FindAnyObjectByType<XROrigin>();
             m_CsvPath = Path.Combine(Application.persistentDataPath, m_FileName);
         }
@@ -71,6 +80,7 @@ namespace ArEnclosure.Diagnostics
 
         void OnEnable()
         {
+            if (m_Manipulator != null) m_Manipulator.ManipulationEnded += OnManipulated;
             if (m_Placement == null) return;
             m_Placement.Placed += OnPlaced;
             m_Placement.Cleared += OnCleared;
@@ -78,9 +88,24 @@ namespace ArEnclosure.Diagnostics
 
         void OnDisable()
         {
+            if (m_Manipulator != null) m_Manipulator.ManipulationEnded -= OnManipulated;
             if (m_Placement == null) return;
             m_Placement.Placed -= OnPlaced;
             m_Placement.Cleared -= OnCleared;
+        }
+
+        void OnManipulated(ManipulationReport report)
+        {
+            m_LastMove = report;
+            m_HasLastMove = true;
+            m_MoveCount++;
+
+            // Re-measure after every move or turn. ModelBounds works in local
+            // space, so a rotation alone cannot change this number. If it
+            // changes, something touched the scale.
+            var instance = m_Placement != null ? m_Placement.PlacedInstance : null;
+            if (instance != null)
+                m_HasPlacedSize = ModelBounds.TryGetWorldSize(instance, out m_PlacedSize);
         }
 
         void OnPlaced(PlacementReport report)
@@ -105,6 +130,8 @@ namespace ArEnclosure.Diagnostics
         void OnCleared()
         {
             m_HasPlacedSize = false;
+            m_HasLastMove = false;
+            m_MoveCount = 0;
         }
 
         void Update()
@@ -121,6 +148,7 @@ namespace ArEnclosure.Diagnostics
 
             AppendRigLines();
             AppendSizeLines();
+            AppendMoveLines();
             AppendRunLines();
 
             m_Readout.text = m_Builder.ToString();
@@ -186,6 +214,47 @@ namespace ArEnclosure.Diagnostics
                 m_Builder.AppendLine("  FAIL something scaled the model");
                 m_Builder.AppendLine("  Look at import Scale Factor, prefab");
                 m_Builder.AppendLine("  root scale, then XR Origin scale.");
+            }
+
+            m_Builder.AppendLine();
+        }
+
+        void AppendMoveLines()
+        {
+            if (m_Manipulator == null) return;
+
+            var mode = m_Modes != null ? m_Modes.Current.ToString() : "Move";
+            var state = m_Manipulator.IsActive ? "on" : "off";
+
+            m_Builder.AppendLine("MOVE  " + mode + " (" + state + ")");
+
+            var instance = m_Placement.PlacedInstance;
+            if (instance == null)
+            {
+                m_Builder.AppendLine("  Place the panel first");
+                m_Builder.AppendLine();
+                return;
+            }
+
+            if (m_Manipulator.CurrentGesture != ManipulationKind.None)
+                m_Builder.AppendLine("  Gesture   " + m_Manipulator.CurrentGesture);
+            else
+                m_Builder.AppendLine("  Drag the panel, twist with two fingers");
+
+            m_Builder.AppendLine("  Yaw       " + instance.transform.eulerAngles.y.ToString("F1") + " deg");
+
+            var s = instance.transform.localScale;
+            var scaleOk = Mathf.Abs(s.x - 1f) < 0.0001f && Mathf.Abs(s.y - 1f) < 0.0001f && Mathf.Abs(s.z - 1f) < 0.0001f;
+            m_Builder.AppendLine("  Scale     " + s.x.ToString("F3") + (scaleOk ? " locked" : "  ! NOT 1, scale lock broken"));
+
+            if (m_HasLastMove)
+            {
+                m_Builder.AppendLine("  Moves     " + m_MoveCount);
+                m_Builder.AppendLine("  Last      " + m_LastMove.Kind + ", moved " +
+                                     m_LastMove.MovedMetres.ToString("F3") + " m, turned " +
+                                     m_LastMove.TurnedDegrees.ToString("F1") + " deg");
+                m_Builder.AppendLine("  Anchor    " + (instance.GetComponent<ARAnchor>() != null ? "attached" : "none") +
+                                     (m_LastMove.Reanchored ? ", re-anchored" : ""));
             }
 
             m_Builder.AppendLine();
