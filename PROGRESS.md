@@ -4,7 +4,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 2.4 Move and rotate
 
-**Status:** built, compiled clean in the Editor, waiting for the device test.
+**Status:** tested on the Pixel 9a on 2026-10-11, all 7 checks passed, merged and tagged `task-2.4`.
 
 **What was built**
 
@@ -38,4 +38,4 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 **Known issues**
 
 - If the panel is dropped on a plane that ARCore later merges, it can still shift slightly, as at placement. This is the documented world-anchor limitation.
-- The HUD now has about 32 lines in a 900 px box, so the bottom lines may spill past it on the phone.
+- On the device the HUD fits, and twist direction is correct.
