@@ -17,6 +17,19 @@ namespace ArEnclosure.Core
         public static bool TryGetLocalSize(GameObject root, out Vector3 size)
         {
             size = Vector3.zero;
+            if (!TryGetLocalBounds(root, out var bounds)) return false;
+            size = bounds.size;
+            return true;
+        }
+
+        /// <summary>
+        /// Box around the model in its own local space. This is the panel's
+        /// oriented box: transform it by the root to get faces, base centre
+        /// or a hit volume that stays tight however the panel is turned.
+        /// </summary>
+        public static bool TryGetLocalBounds(GameObject root, out Bounds bounds)
+        {
+            bounds = new Bounds();
             if (root == null) return false;
 
             var filters = root.GetComponentsInChildren<MeshFilter>(true);
@@ -52,7 +65,7 @@ namespace ArEnclosure.Core
             }
 
             if (!found) return false;
-            size = max - min;
+            bounds.SetMinMax(min, max);
             return true;
         }
 
