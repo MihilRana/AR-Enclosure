@@ -70,6 +70,7 @@ namespace ArEnclosure.Placement
 
         public GameObject ModelPrefab => m_ModelPrefab;
         public GameObject PlacedInstance => m_Instance;
+        public GameObject ReferenceInstance => m_Reference;
         public bool HasPlaced => m_Instance != null;
         public string Status { get; private set; } = "Starting session";
         public float WarmUpSeconds => m_TrackingStartedAt < 0f ? 0f : Time.time - m_TrackingStartedAt;
