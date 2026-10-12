@@ -2,6 +2,55 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 2.5 Measurement tool
+
+**Status:** built, compiled clean in the Editor, waiting for the device test.
+
+**What was built**
+
+- Mode button (bottom left): switches between Move and Measure. The mode lives in `AppModeController`, and the HUD only calls `RequestMode`. In Measure mode, drag, rotate and placement taps are all off. In Move mode they work as before.
+- `MeasurementTool`:
+  - Distance: tap A, then tap B. The app shows the straight-line distance to 3 decimals, with markers and a line between the points.
+  - Perimeter: tap 3 or more points, then press Close loop. The app shows the closed perimeter.
+  - A tap after a result starts a new measurement. The Distance/Perimeter button and the Clear button only show in Measure mode.
+  - Points are frozen world positions, not parented to any plane, so plane merging cannot move them.
+- `MeasurementLog`: each result is written to `measurements.csv` in `Application.persistentDataPath`.
+  - Columns: `run_id, timestamp, mode, point_count, points, distance_m, camera_distance_m, tracking_state`.
+  - `run_id` continues from the highest id already in the file, so restarting the app never reuses a number. The screen shows "Run #N" next to each result.
+  - `points` is written as `x;y;z|x;y;z`, so commas only separate columns.
+  - `camera_distance_m` is measured from the camera to the segment's midpoint, or to the centre of the points for a perimeter.
+  - `tracking_state` is the session state plus `PlanesTracking` or `PlaneLimited`. That second part shows whether every hit plane was fully tracked at the time of the tap.
+- `MeasureMarker.mat` is a URP Unlit material asset that the scene references, so IL2CPP keeps its shader in the build.
+- `ARPlacementController` now places the panel only in Move mode, so a measurement tap cannot drop the panel.
+- The `ScaleReadout` text no longer accepts taps. It used to block placement taps over the top-left 700 x 900 area.
+
+**Files touched**
+
+- `Assets/_Project/Scripts/Measurement/MeasurementTool.cs` (new)
+- `Assets/_Project/Scripts/Measurement/MeasurementLog.cs` (new)
+- `Assets/_Project/Scripts/UI/MeasurementHUD.cs` (new)
+- `Assets/_Project/Materials/MeasureMarker.mat` (new)
+- `Assets/_Project/Scripts/Placement/ARPlacementController.cs`: optional `m_Modes`, and taps only place the panel in Move mode.
+- `Assets/Scenes/ARPlacement.unity`:
+  - New UI on `/Canvas`: ModeButton, MeasureKindButton, MeasureClearButton, CloseLoopButton and MeasureResult.
+  - `MeasurementTool` added to `/Controllers`, and `MeasurementHUD` added to `/Canvas`.
+  - `ScaleReadout` raycast target turned off.
+
+**How to test**
+
+1. The app starts in Move mode. Place the panel, then drag and twist it as in 2.4.
+2. Tap Mode. It should read "Mode: Measure", and the Distance and Clear buttons should appear. Dragging the panel should now do nothing.
+3. Distance: tap two points on the floor that you have marked with tape. You should see a yellow line, then "Run #N" and "x.xxx m". Measure the same gap with the tape and note it next to Run #N.
+4. Tap again to start the next run, and check that N goes up by 1.
+5. Tap Distance so it changes to Perimeter. Tap 4 corners of a rectangle on the floor, then press Close loop. The loop should close and the perimeter should appear.
+6. Close the app, reopen it and do one measurement. Run # should carry on from the last number, not restart at 1.
+7. Pull the CSV with `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/measurements.csv`, and check that the `run_id` values match what you wrote down.
+
+**Known issues**
+
+- Only horizontal planes are detected for now (vertical detection is a 3.3 decision), so measurement points can only go on floors and tables, not walls.
+- Taps land on the inside of a detected plane outline only. If a corner is outside the detected area, the tap is refused with "No tracked surface under that tap".
+
 ## 2.4 Move and rotate
 
 **Status:** tested on the Pixel 9a on 2026-10-11, all 7 checks passed, merged and tagged `task-2.4`.
