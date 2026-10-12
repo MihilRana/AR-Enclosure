@@ -34,7 +34,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - ARCore then settled on the upper estimate: all 5 planes ended at -1.167 m, with 4 merged into one. Choosing the lowest plane would have been wrong.
 - Placement happened 5.16 m away, where depth error is largest.
 
-**Step 2, floor lock. Status:** the lock works on the device. The four Step 2b fixes below are built and compiled clean in the Editor, waiting for the device test.
+**Step 2, floor lock. Status:** tested on the device. The lock, the band, the CSV, the settling gate and the 3.5 m limit are verified. The Re-seat button is not yet triggered on the device. Merged and tagged `task-2.5b`.
 
 - New `Placement/FloorLock.cs`:
   - A usable plane is unmerged, fully tracked, horizontal and at least 0.25 m².
@@ -67,6 +67,22 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 4. CSV filename: `plane_diagnostics_v2.csv` was never created, because the scene had saved the old filename in a serialized field, which overrode the code. The filename and header are now constants. If the file on disk has a different header, it is renamed to `plane_diagnostics_v2_old_<stamp>.csv` and a fresh file is started. Step 2 rows from 21:45 to 21:53 are in the old `plane_diagnostics.csv` under the v1 header, so read them with that in mind.
 
 New `UI/PlacementHUD.cs` shows the Re-seat button only when `ARPlacementController.CanReseat` is true.
+
+**Step 2b device test (2026-10-12, 23:23 to 23:32, `plane_diagnostics_v2.csv` plus 4 screenshots)**
+
+- CSV: the v2 file was created with the new header, and the lock columns are filled in after placement. Verified.
+- Band follows the current floor height: planes 68 cm below the floor and 1.19 m above it were marked `off-floor`. Plane `7133` went from `small` (0.24 m²) to `off-floor` (0.26 m²) as it grew, not to `ok`. Every drag hit was on the locked plane. Verified.
+- Settling gate: at 23:29:40 to 43, eight placement taps were refused while three estimates sat 23 to 37 cm apart. Placement went ahead at 23:30:34 once they agreed near the tap. Verified.
+- 3.5 m limit: taps at 3.59 to 4.96 m were refused. All 5 placements were at 3.45 m or less, with ratio 1.0000. Verified.
+- Rotation pivot: in screenshot 3, a 32.4° turn moved the FBX pivot 0.457 m. That equals 2 × 0.82 m × sin(16.2°), the pivot's offset from the base centre, so the panel turned exactly about its base centre. Screenshot 2 also matches (13.6° gives 0.194 m).
+- Re-seat on floor: **not exercised**. Drift peaked at -1.4 cm, below the 3 cm threshold, so the button never appeared.
+- Only the locked floor is drawn: probably working, but not proven, since no other plane was in camera view.
+
+**Finding: a plane below the floor.** Screenshot 4 shows plane `efb7` 68 cm below the locked floor, which is physically impossible on a solid floor. The likely cause is the glossy tiles: ARCore tracks reflected features that appear to lie below the surface. In every session, ARCore merged the lower plane into the upper one (20:16, and 23:31:27 where `…5950` merged into `…54F0`). So the false planes are most likely the lower, reflection-made ones, and the original "jump up" was probably a placement on a reflected plane followed by a drag onto the real floor. The floor lock covers this case. Record it as an environmental limitation: reflective floors.
+
+**Fix: the "moved" readout after a rotate.** `ManipulationReport.MovedMetres` and `FinalPosition` now use the base centre (the point the twist pivots on) instead of the FBX pivot. A pure turn now reports 0 m moved. Checked in the Editor: a 32.4° turn about the base centre gives 0.457 m with the old method (matching screenshot 3) and 0.0000 m with the new one. Changed file: `Placement/PlacementManipulator.cs`.
+
+**Status at merge:** merged and tagged `task-2.5b` with the Re-seat button not yet tested on the device. It will be checked during the tape test, by placing and then walking a slow lap of the room until drift passes 3 cm.
 
 **Files touched (Step 2):** `Placement/FloorLock.cs` (new), `Core/PlaneMetrics.cs` (new), `Placement/ARPlacementController.cs`, `Placement/PlacementManipulator.cs`, `Measurement/MeasurementTool.cs`, `Diagnostics/PlaneDiagnostics.cs`, `Scenes/ARPlacement.unity` (FloorLock on `/Controllers`, wired into all four components, placement limit 3.5 m).
 
