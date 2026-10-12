@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using ArEnclosure.App;
 using ArEnclosure.Core;
 using Unity.XR.CoreUtils;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -60,6 +60,9 @@ namespace ArEnclosure.Placement
 
         [SerializeField] Material m_ReferenceMaterial;
 
+        [Tooltip("Optional. When set, taps only place the panel in Move mode.")]
+        [SerializeField] AppModeController m_Modes;
+
         public event Action<PlacementReport> Placed;
         public event Action Cleared;
 
@@ -106,6 +109,9 @@ namespace ArEnclosure.Placement
 
         void Update()
         {
+#if ENABLE_INPUT_SYSTEM
+            UiTouchFilter.Refresh();
+#endif
             UpdateWarmUp();
 
             if (m_Instance != null)
@@ -117,6 +123,14 @@ namespace ArEnclosure.Placement
             if (!ReadyToPlace(out var blockedReason))
             {
                 Status = blockedReason;
+                return;
+            }
+
+            // Other tools own taps in their own modes, so a measurement tap
+            // must not also drop the panel.
+            if (m_Modes != null && m_Modes.Current != AppMode.Move)
+            {
+                Status = "Switch to Move mode to place.";
                 return;
             }
 
@@ -178,7 +192,7 @@ namespace ArEnclosure.Placement
             for (var i = 0; i < touches.Count; i++)
             {
                 if (touches[i].phase != InputTouchPhase.Began) continue;
-                if (IsOverUI(touches[i].finger.index)) continue;
+                if (UiTouchFilter.IsBlocked(touches[i])) continue;
                 screenPoint = touches[i].screenPosition;
                 return true;
             }
@@ -187,18 +201,12 @@ namespace ArEnclosure.Placement
             {
                 var touch = Input.GetTouch(i);
                 if (touch.phase != TouchPhase.Began) continue;
-                if (IsOverUI(touch.fingerId)) continue;
+                if (UiTouchFilter.IsOverUI(touch.position)) continue;
                 screenPoint = touch.position;
                 return true;
             }
 #endif
             return false;
-        }
-
-        static bool IsOverUI(int pointerId)
-        {
-            return EventSystem.current != null &&
-                   EventSystem.current.IsPointerOverGameObject(pointerId);
         }
 
         void TryPlace(Vector2 screenPoint)
