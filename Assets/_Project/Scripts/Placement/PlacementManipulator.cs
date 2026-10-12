@@ -399,7 +399,11 @@ namespace ArEnclosure.Placement
         {
             point = default;
             if (m_RaycastManager == null) return false;
-            if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon)) return false;
+            if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
+            {
+                RaycastProbe.Record("drag", m_Hits, -1);
+                return false;
+            }
 
             for (var i = 0; i < m_Hits.Count; i++)
             {
@@ -409,10 +413,12 @@ namespace ArEnclosure.Placement
                 var plane = m_PlaneManager != null ? m_PlaneManager.GetPlane(hit.trackableId) : null;
                 if (plane != null && plane.alignment != PlaneAlignment.HorizontalUp) continue;
 
+                RaycastProbe.Record("drag", m_Hits, i);
                 point = hit.pose.position;
                 return true;
             }
 
+            RaycastProbe.Record("drag", m_Hits, -1);
             return false;
         }
 

@@ -145,9 +145,11 @@ namespace ArEnclosure.Measurement
         {
             if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
             {
+                RaycastProbe.Record("measure", m_Hits, -1);
                 Prompt = "No tracked surface under that tap.";
                 return;
             }
+            RaycastProbe.Record("measure", m_Hits, 0);
 
             // A tap after a finished result starts a fresh measurement.
             if (IsComplete) ClearPoints();

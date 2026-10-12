@@ -213,9 +213,11 @@ namespace ArEnclosure.Placement
         {
             if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
             {
+                RaycastProbe.Record("place", m_Hits, -1);
                 Status = "No tracked surface under that tap.";
                 return;
             }
+            RaycastProbe.Record("place", m_Hits, 0);
 
             var hit = m_Hits[0];
             var cameraTransform = m_XROrigin.Camera.transform;
