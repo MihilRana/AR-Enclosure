@@ -34,7 +34,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - ARCore then settled on the upper estimate: all 5 planes ended at -1.167 m, with 4 merged into one. Choosing the lowest plane would have been wrong.
 - Placement happened 5.16 m away, where depth error is largest.
 
-**Step 2, floor lock. Status:** built, compiled clean in the Editor, waiting for the device test.
+**Step 2, floor lock. Status:** the lock works on the device. The four Step 2b fixes below are built and compiled clean in the Editor, waiting for the device test.
 
 - New `Placement/FloorLock.cs`:
   - A usable plane is unmerged, fully tracked, horizontal and at least 0.25 m².
@@ -55,6 +55,19 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
   - The CSV is now `plane_diagnostics_v2.csv`, with added `lock_id, lock_y, lock_current_y, lock_drift_m` columns.
 - New `Core/PlaneMetrics.cs`: shared polygon area and horizontal distance helpers.
 
+**Step 2 device test (2026-10-12, 21:45 to 21:53):** the lock worked. Four issues were found and fixed in Step 2b:
+
+1. Band bug: the ±3 cm band was measured from the height at lock time. After the floor drifted by -7.2 cm, planes about 5 cm above the current floor were marked `ok` and could take taps. The band now follows the locked floor's current height, in both `TryPickHit` and the readout's `use` column.
+2. Visual pile-up: after the lock, only the locked floor (the end of its merge chain) is drawn. Every other plane is hidden, whatever its height or size. Merged members copy their parent's outline exactly, so drawing them would only stack the same dots again. Before the lock, usable planes are still shown.
+3. Drift: when drift is more than 3 cm, a "Re-seat on floor" button (amber, bottom right) appears.
+   - Pressing it removes the anchor, waits one frame, moves the panel and the 1 m rod vertically so the base sits on the floor's current height, then adds a fresh anchor.
+   - It only moves height: position on the floor, yaw and scale are unchanged.
+   - It then rebases the lock, so drift reads 0. The status shows "Re-seated on floor, moved ±X cm".
+   - The drift warning in the status line is kept until you re-seat.
+4. CSV filename: `plane_diagnostics_v2.csv` was never created, because the scene had saved the old filename in a serialized field, which overrode the code. The filename and header are now constants. If the file on disk has a different header, it is renamed to `plane_diagnostics_v2_old_<stamp>.csv` and a fresh file is started. Step 2 rows from 21:45 to 21:53 are in the old `plane_diagnostics.csv` under the v1 header, so read them with that in mind.
+
+New `UI/PlacementHUD.cs` shows the Re-seat button only when `ARPlacementController.CanReseat` is true.
+
 **Files touched (Step 2):** `Placement/FloorLock.cs` (new), `Core/PlaneMetrics.cs` (new), `Placement/ARPlacementController.cs`, `Placement/PlacementManipulator.cs`, `Measurement/MeasurementTool.cs`, `Diagnostics/PlaneDiagnostics.cs`, `Scenes/ARPlacement.unity` (FloorLock on `/Controllers`, wired into all four components, placement limit 3.5 m).
 
 **How to test Step 2**
@@ -67,6 +80,15 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 6. Tap a surface more than 3.5 m away. It should say "Step within 3.5 m".
 7. Press Reset. The LOCK block should show "none", and placing again should create a new lock.
 8. Pull the log: `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/plane_diagnostics_v2.csv`
+
+**How to test Step 2b**
+
+1. Run `adb shell ls /sdcard/Android/data/com.mihil.arenclosure/files/`. After one placement, `plane_diagnostics_v2.csv` should exist. Its first line should end in `lock_id,lock_y,lock_current_y,lock_drift_m,hits,planes`, and the rows should have lock values filled in.
+2. After placement, only one plane (the LOCKED one) should be drawn. Other planes should still be listed in the readout but not drawn.
+3. Walk around until drift is more than 3 cm. Any plane that is more than 3 cm from "floor now" should show `off-floor`, not `ok`, even if it is close to the original lock height. Taps on it should be refused.
+4. While drift is more than 3 cm: the status shows the warning and the amber Re-seat on floor button appears. Press it. The panel should move by about the drift, then the status should show "Re-seated ... moved ±X cm". Drift should read about 0.0 and the button should disappear.
+5. After re-seating, the HUD should show Scale 1.000 locked, Ratio 1.0000, and an attached anchor. Walk around and check the panel stays put.
+6. Press Reset: the lock should clear, the button should stay hidden, and usable planes should be drawn again.
 
 **Known issues**
 
