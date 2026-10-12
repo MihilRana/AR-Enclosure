@@ -2,6 +2,31 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 2.5b Floor lock (false upper planes)
+
+**Problem seen on the device:** ARCore sometimes makes a horizontal plane above the real floor, or several overlapping planes for one floor. Drag and measurement taps then hit the upper plane, and the panel jumps up onto it. Plane outlines also show wrong corners and overlap each other.
+
+**Step 1, diagnostics only. Status:** built, compiled clean in the Editor, waiting for the device test. Behaviour is unchanged.
+
+- New `Core/RaycastProbe.cs`: placement, drag and measurement each report their full hit list (nearest first) and which hit they used.
+- New `Diagnostics/PlaneDiagnostics.cs`, with an on-screen `PlaneReadout` between the scale readout and the buttons. It shows:
+  - every plane sorted by height: short id, height above the lowest plane, size, area, tracking state, and which plane it was merged into, if any;
+  - the last raycast: every hit, which one was used, and how far each hit sits above the lowest plane.
+- `plane_diagnostics.csv` in `persistentDataPath` logs placement and measurement taps every time. Drag is logged only when the winning plane or the hit count changes. Each row holds the full trackable ids, every hit and a snapshot of all planes.
+
+**Working hypothesis, to confirm with the data:**
+1. Raycast hits come back nearest first. A false plane above the floor is nearer, so drag and measure take it, and drag seats the panel on it.
+2. One floor is often detected as several planes a few cm apart until ARCore merges them. A merged plane may stay in the list for a while and can still be hit.
+3. If the "false" plane is 30 cm or more higher, it is probably a real surface (rug, step, furniture) rather than tracking error.
+
+**How to test Step 1**
+
+1. Place the panel. Note the PLANES list and which plane the LAST HIT used. That is the floor.
+2. Walk around until an extra plane appears or the panel jumps during a drag. Take a screenshot of the readout at that moment.
+3. Note the "above" value of the upper plane and whether its merged column shows "into xxxx".
+4. Measure across the floor where the overlap is, and check which plane the LAST HIT used.
+5. Pull the log: `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/plane_diagnostics.csv`
+
 ## 2.5 Measurement tool
 
 **Status:** tested on the Pixel 9a on 2026-10-12. The first test passed steps 1 to 7 (run_id 1 to 26, carried across a restart) and found a tap-through bug. The fix passed its re-test (runs 27 to 35). Merged and tagged `task-2.5`.
