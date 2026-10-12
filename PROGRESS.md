@@ -4,7 +4,13 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 2.5 Measurement tool
 
-**Status:** built, compiled clean in the Editor, waiting for the device test.
+**Status:** first device test on 2026-10-12 passed steps 1 to 7 (run_id 1 to 26, carried across a restart). Found a tap-through bug, now fixed. Waiting for a re-test.
+
+**Fix: UI tap-through.** A button press also counted as an AR tap behind it. For example, pressing Close loop added a fifth corner, as in runs 18 and 21, which logged 5 points for 4 corners. Those two CSV rows are invalid.
+- New `Core/UiTouchFilter`: once per frame it checks each new touch with `EventSystem.RaycastAll` at the touch position. A finger that begins over UI stays blocked until it lifts.
+- `ARPlacementController`, `MeasurementTool` and `PlacementManipulator` all ignore blocked fingers. The manipulator also leaves them out of finger counts, so a finger resting on a button cannot become half of a twist.
+- This replaces `IsPointerOverGameObject`, which was unreliable with the Input System UI module.
+- All five buttons now have a 60% black rounded background with a white child label, so they are readable over the camera feed.
 
 **What was built**
 
@@ -46,8 +52,17 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 6. Close the app, reopen it and do one measurement. Run # should carry on from the last number, not restart at 1.
 7. Pull the CSV with `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/measurements.csv`, and check that the `run_id` values match what you wrote down.
 
+**Re-test after the tap-through fix**
+
+1. Perimeter: tap 4 corners, then press Close loop. The result should say "Perimeter, 4 pts", and the CSV `point_count` should be 4.
+2. Distance: after tapping A, press Clear. No marker should appear under the Clear button.
+3. Press Mode while in Measure mode. No point should be added, and in Move mode the panel should not jump or start dragging.
+4. Rest one finger on a button and drag another finger on the panel. It should drag, not twist.
+5. Check that the buttons are readable over a bright floor.
+
 **Known issues**
 
+- Rows from runs 18 and 21 in `measurements.csv` have an extra point added by the tap-through bug. Leave them out of the accuracy analysis.
 - Only horizontal planes are detected for now (vertical detection is a 3.3 decision), so measurement points can only go on floors and tables, not walls.
 - Taps land on the inside of a detected plane outline only. If a corner is outside the detected area, the tap is refused with "No tracked surface under that tap".
 
