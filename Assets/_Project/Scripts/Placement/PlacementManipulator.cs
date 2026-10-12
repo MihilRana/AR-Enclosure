@@ -22,8 +22,13 @@ namespace ArEnclosure.Placement
     public struct ManipulationReport
     {
         public ManipulationKind Kind;
+        /// <summary>
+        /// Horizontal travel of the base centre. Not the FBX pivot, which sits
+        /// 0.82 m off-centre and would report a pure turn as movement.
+        /// </summary>
         public float MovedMetres;
         public float TurnedDegrees;
+        /// <summary>World position of the base centre after the gesture.</summary>
         public Vector3 FinalPosition;
         public float FinalYaw;
         public bool Reanchored;
@@ -259,7 +264,7 @@ namespace ArEnclosure.Placement
         void BeginGesture(GameObject instance, ManipulationKind kind)
         {
             m_KindThisGesture = kind;
-            m_StartPosition = instance.transform.position;
+            m_StartPosition = instance.transform.TransformPoint(BaseCentreLocal());
             m_StartYaw = instance.transform.eulerAngles.y;
 
             var anchor = instance.GetComponent<ARAnchor>();
@@ -296,8 +301,11 @@ namespace ArEnclosure.Placement
                 reanchored = true;
             }
 
+            // Measured at the base centre, the point the twist pivots on, so a
+            // pure turn reports 0 m moved.
             var t = instance.transform;
-            var moved = t.position - m_StartPosition;
+            var baseCentre = t.TransformPoint(BaseCentreLocal());
+            var moved = baseCentre - m_StartPosition;
             moved.y = 0f;
 
             ManipulationEnded?.Invoke(new ManipulationReport
@@ -305,7 +313,7 @@ namespace ArEnclosure.Placement
                 Kind = m_KindThisGesture,
                 MovedMetres = moved.magnitude,
                 TurnedDegrees = Mathf.DeltaAngle(m_StartYaw, t.eulerAngles.y),
-                FinalPosition = t.position,
+                FinalPosition = baseCentre,
                 FinalYaw = t.eulerAngles.y,
                 Reanchored = reanchored
             });
