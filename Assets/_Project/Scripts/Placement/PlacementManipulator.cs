@@ -4,7 +4,6 @@ using ArEnclosure.App;
 using ArEnclosure.Core;
 using Unity.XR.CoreUtils;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using UnityEngine.InputSystem.EnhancedTouch;
@@ -152,6 +151,7 @@ namespace ArEnclosure.Placement
 
         void Update()
         {
+            UiTouchFilter.Refresh();
             var instance = m_Placement != null ? m_Placement.PlacedInstance : null;
 
             if (instance == null)
@@ -232,7 +232,7 @@ namespace ArEnclosure.Placement
             {
                 var touch = touches[i];
                 if (touch.phase != InputTouchPhase.Began) continue;
-                if (IsOverUI(touch.finger.index)) continue;
+                if (UiTouchFilter.IsBlocked(touch)) continue;
 
                 if (down >= 2)
                 {
@@ -435,7 +435,7 @@ namespace ArEnclosure.Placement
             var count = 0;
             var touches = ETouch.activeTouches;
             for (var i = 0; i < touches.Count; i++)
-                if (touches[i].isInProgress) count++;
+                if (IsLive(touches[i])) count++;
             return count;
         }
 
@@ -447,7 +447,7 @@ namespace ArEnclosure.Placement
             var touches = ETouch.activeTouches;
             for (var i = 0; i < touches.Count; i++)
             {
-                if (touches[i].finger.index != fingerIndex || !touches[i].isInProgress) continue;
+                if (touches[i].finger.index != fingerIndex || !IsLive(touches[i])) continue;
                 touch = touches[i];
                 return true;
             }
@@ -463,7 +463,7 @@ namespace ArEnclosure.Placement
             var touches = ETouch.activeTouches;
             for (var i = 0; i < touches.Count && found < 2; i++)
             {
-                if (!touches[i].isInProgress) continue;
+                if (!IsLive(touches[i])) continue;
                 if (found == 0) a = touches[i];
                 else b = touches[i];
                 found++;
@@ -471,10 +471,10 @@ namespace ArEnclosure.Placement
             return found == 2;
         }
 
-        static bool IsOverUI(int pointerId)
+        /// <summary>Down, and did not begin over UI.</summary>
+        static bool IsLive(ETouch touch)
         {
-            return EventSystem.current != null &&
-                   EventSystem.current.IsPointerOverGameObject(pointerId);
+            return touch.isInProgress && !UiTouchFilter.IsBlocked(touch);
         }
     }
 }

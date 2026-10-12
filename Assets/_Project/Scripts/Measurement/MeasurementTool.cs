@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using ArEnclosure.App;
+using ArEnclosure.Core;
 using Unity.XR.CoreUtils;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 using UnityEngine.InputSystem.EnhancedTouch;
@@ -103,6 +103,7 @@ namespace ArEnclosure.Measurement
 
         void Update()
         {
+            UiTouchFilter.Refresh();
             if (!IsActive) return;
 
             UpdatePrompt();
@@ -283,17 +284,11 @@ namespace ArEnclosure.Measurement
             for (var i = 0; i < touches.Count; i++)
             {
                 if (touches[i].phase != InputTouchPhase.Began) continue;
-                if (IsOverUI(touches[i].finger.index)) continue;
+                if (UiTouchFilter.IsBlocked(touches[i])) continue;
                 screenPoint = touches[i].screenPosition;
                 return true;
             }
             return false;
-        }
-
-        static bool IsOverUI(int pointerId)
-        {
-            return EventSystem.current != null &&
-                   EventSystem.current.IsPointerOverGameObject(pointerId);
         }
     }
 }

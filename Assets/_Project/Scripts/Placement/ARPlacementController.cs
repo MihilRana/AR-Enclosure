@@ -4,7 +4,6 @@ using ArEnclosure.App;
 using ArEnclosure.Core;
 using Unity.XR.CoreUtils;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -110,6 +109,9 @@ namespace ArEnclosure.Placement
 
         void Update()
         {
+#if ENABLE_INPUT_SYSTEM
+            UiTouchFilter.Refresh();
+#endif
             UpdateWarmUp();
 
             if (m_Instance != null)
@@ -190,7 +192,7 @@ namespace ArEnclosure.Placement
             for (var i = 0; i < touches.Count; i++)
             {
                 if (touches[i].phase != InputTouchPhase.Began) continue;
-                if (IsOverUI(touches[i].finger.index)) continue;
+                if (UiTouchFilter.IsBlocked(touches[i])) continue;
                 screenPoint = touches[i].screenPosition;
                 return true;
             }
@@ -199,18 +201,12 @@ namespace ArEnclosure.Placement
             {
                 var touch = Input.GetTouch(i);
                 if (touch.phase != TouchPhase.Began) continue;
-                if (IsOverUI(touch.fingerId)) continue;
+                if (UiTouchFilter.IsOverUI(touch.position)) continue;
                 screenPoint = touch.position;
                 return true;
             }
 #endif
             return false;
-        }
-
-        static bool IsOverUI(int pointerId)
-        {
-            return EventSystem.current != null &&
-                   EventSystem.current.IsPointerOverGameObject(pointerId);
         }
 
         void TryPlace(Vector2 screenPoint)
