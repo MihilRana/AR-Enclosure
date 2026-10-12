@@ -24,11 +24,11 @@ namespace ArEnclosure.Placement
     ///
     /// After placement: the floor plane is locked. Drag and measurement only
     /// accept hits on that plane, or on whatever ARCore merges it into, or on
-    /// a usable plane within the height band of the locked height. A false
-    /// upper floor that is nearer the camera can no longer win the raycast.
+    /// a usable plane within the height band of the locked floor's current
+    /// height. A false upper floor nearer the camera can no longer win.
     ///
-    /// Also hides merged and small planes, which ARCore keeps reporting and
-    /// which otherwise draw on top of each other.
+    /// Visuals: before the lock only usable planes are drawn. After it only
+    /// the locked floor is drawn, so stacked and false planes disappear.
     /// </summary>
     public class FloorLock : MonoBehaviour
     {
@@ -87,9 +87,13 @@ namespace ArEnclosure.Placement
             if (!m_HideUnusablePlanes || m_PlaneManager == null) return;
 
             // After the plane visualisers have run this frame, so ours wins.
+            // Before the lock, every usable plane is drawn so the user can see
+            // what is available. After it, only the locked floor is drawn. Its
+            // merged members copy its outline exactly, so drawing them too
+            // would only stack the same dots again.
             foreach (var plane in m_PlaneManager.trackables)
             {
-                var visible = IsUsable(plane) || (HasLock && plane.trackableId == CurrentId);
+                var visible = HasLock ? plane.trackableId == CurrentId : IsUsable(plane);
                 var planeRenderer = plane.GetComponent<Renderer>();
                 if (planeRenderer != null && planeRenderer.enabled != visible) planeRenderer.enabled = visible;
             }
@@ -149,7 +153,9 @@ namespace ArEnclosure.Placement
                     continue;
                 }
 
-                if (HasLock && Mathf.Abs(hit.pose.position.y - LockedHeight) > m_HeightTolerance)
+                // The band sits on the locked floor as it is now, not where it
+                // was at lock time, so drift cannot let a false plane back in.
+                if (HasLock && Mathf.Abs(hit.pose.position.y - CurrentHeight) > m_HeightTolerance)
                 {
                     rejection = HitRejection.OffLockedFloor;
                     continue;
@@ -196,6 +202,16 @@ namespace ArEnclosure.Placement
             LockedHeight = height;
             CurrentHeight = height;
             CurrentPlaneTracked = plane != null;
+        }
+
+        /// <summary>
+        /// Accept the floor's current height as the new reference. Called after
+        /// the panel has been re-seated onto it, which clears the drift.
+        /// </summary>
+        public void Rebase()
+        {
+            if (!HasLock) return;
+            LockedHeight = CurrentHeight;
         }
 
         public void Clear()

@@ -27,7 +27,12 @@ namespace ArEnclosure.Diagnostics
 
         [Header("Logging")]
         [SerializeField] bool m_WriteCsv = true;
-        [SerializeField] string m_FileName = "plane_diagnostics_v2.csv";
+
+        // Constants, not serialized fields: a serialized name kept the old
+        // file in use after the columns changed, mixing two headers in one CSV.
+        const string k_FileName = "plane_diagnostics_v2.csv";
+        const string k_Header = "timestamp,source,hit_count,chosen_id,chosen_y,lowest_plane_y," +
+                                "chosen_above_lowest_m,plane_count,lock_id,lock_y,lock_current_y,lock_drift_m,hits,planes";
 
         static readonly CultureInfo k_Ci = CultureInfo.InvariantCulture;
 
@@ -41,7 +46,8 @@ namespace ArEnclosure.Diagnostics
         {
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
             if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
-            m_CsvPath = Path.Combine(Application.persistentDataPath, m_FileName);
+            m_CsvPath = Path.Combine(Application.persistentDataPath, k_FileName);
+            SetAsideIfHeaderChanged();
         }
 
         void OnEnable() => RaycastProbe.Recorded += OnRecorded;
@@ -135,8 +141,7 @@ namespace ArEnclosure.Diagnostics
                 {
                     if (newFile)
                     {
-                        writer.WriteLine("timestamp,source,hit_count,chosen_id,chosen_y,lowest_plane_y," +
-                                         "chosen_above_lowest_m,plane_count,lock_id,lock_y,lock_current_y,lock_drift_m,hits,planes");
+                        writer.WriteLine(k_Header);
                     }
 
                     var chosen = r.Chosen >= 0 ? r.Hits[r.Chosen] : default;
@@ -188,6 +193,28 @@ namespace ArEnclosure.Diagnostics
             }
         }
 
+        /// <summary>
+        /// If the file on disk was written with different columns, rename it
+        /// and start fresh, so one CSV never holds two layouts.
+        /// </summary>
+        void SetAsideIfHeaderChanged()
+        {
+            try
+            {
+                if (!File.Exists(m_CsvPath)) return;
+                string first;
+                using (var reader = new StreamReader(m_CsvPath)) first = reader.ReadLine();
+                if (first == k_Header) return;
+
+                var stamp = System.DateTime.Now.ToString("yyyyMMdd_HHmmss", k_Ci);
+                File.Move(m_CsvPath, Path.Combine(Application.persistentDataPath, "plane_diagnostics_v2_old_" + stamp + ".csv"));
+            }
+            catch (IOException e)
+            {
+                Debug.LogWarning("Plane diagnostics header check failed: " + e.Message);
+            }
+        }
+
         void CollectPlanes()
         {
             m_Planes.Clear();
@@ -209,7 +236,7 @@ namespace ArEnclosure.Diagnostics
             if (HasLock && plane.trackableId == m_FloorLock.CurrentId) return "LOCKED";
             var label = m_FloorLock.UsabilityLabel(plane);
             if (label == "ok" && HasLock &&
-                Mathf.Abs(plane.transform.position.y - m_FloorLock.LockedHeight) > m_FloorLock.HeightTolerance)
+                Mathf.Abs(plane.transform.position.y - m_FloorLock.CurrentHeight) > m_FloorLock.HeightTolerance)
                 return "off-floor";
             return label;
         }
@@ -229,7 +256,7 @@ namespace ArEnclosure.Diagnostics
                 : "";
             m_Builder.Append("LOCK  ").Append(RaycastProbe.ShortId(m_FloorLock.CurrentId)).Append(followed)
                 .Append("  y ").Append(m_FloorLock.LockedHeight.ToString("F3"))
-                .Append("  band +/-").Append((m_FloorLock.HeightTolerance * 100f).ToString("F0")).AppendLine(" cm");
+                .Append("  band +/-").Append((m_FloorLock.HeightTolerance * 100f).ToString("F0")).AppendLine(" cm of floor now");
             m_Builder.Append("  floor now ").Append(m_FloorLock.CurrentHeight.ToString("F3"))
                 .Append(", drift ").Append((m_FloorLock.Drift * 100f).ToString("+0.0;-0.0")).Append(" cm")
                 .Append(m_FloorLock.CurrentPlaneTracked ? "" : ", plane lost")
