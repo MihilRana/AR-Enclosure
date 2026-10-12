@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ArEnclosure.App;
 using ArEnclosure.Core;
+using ArEnclosure.Placement;
 using Unity.XR.CoreUtils;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
@@ -43,6 +44,8 @@ namespace ArEnclosure.Measurement
         [SerializeField] ARRaycastManager m_RaycastManager;
         [SerializeField] ARPlaneManager m_PlaneManager;
         [SerializeField] XROrigin m_XROrigin;
+        [Tooltip("Optional. Ignores small or merged planes, and after placement only accepts the locked floor.")]
+        [SerializeField] FloorLock m_FloorLock;
 
         [Header("Visuals")]
         [Tooltip("URP Unlit material asset. Referenced, never Shader.Find, so IL2CPP keeps the shader.")]
@@ -72,6 +75,7 @@ namespace ArEnclosure.Measurement
         MeasurementLog m_Log;
         LineRenderer m_Line;
         bool m_AllPlanesTracking = true;
+        float m_NoticeUntil = -1f;
 
         void Awake()
         {
@@ -79,6 +83,7 @@ namespace ArEnclosure.Measurement
             if (m_XROrigin == null) m_XROrigin = FindAnyObjectByType<XROrigin>();
             if (m_RaycastManager == null) m_RaycastManager = FindAnyObjectByType<ARRaycastManager>();
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
+            if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
             m_Log = new MeasurementLog(m_FileName);
         }
 
@@ -146,15 +151,26 @@ namespace ArEnclosure.Measurement
             if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
             {
                 RaycastProbe.Record("measure", m_Hits, -1);
-                Prompt = "No tracked surface under that tap.";
+                Notice("No tracked surface under that tap.");
                 return;
             }
-            RaycastProbe.Record("measure", m_Hits, 0);
+
+            var chosen = 0;
+            if (m_FloorLock != null &&
+                !m_FloorLock.TryPickHit(m_Hits, float.PositiveInfinity, out chosen, out var rejection))
+            {
+                RaycastProbe.Record("measure", m_Hits, -1);
+                Notice(rejection == HitRejection.OffLockedFloor
+                    ? "That surface is not the locked floor."
+                    : "Surface not reliable yet (small or merged).");
+                return;
+            }
+            RaycastProbe.Record("measure", m_Hits, chosen);
 
             // A tap after a finished result starts a fresh measurement.
             if (IsComplete) ClearPoints();
 
-            var hit = m_Hits[0];
+            var hit = m_Hits[chosen];
             var plane = m_PlaneManager != null ? m_PlaneManager.GetPlane(hit.trackableId) : null;
             if (plane != null && plane.trackingState != TrackingState.Tracking) m_AllPlanesTracking = false;
 
@@ -203,8 +219,17 @@ namespace ArEnclosure.Measurement
             return Vector3.Distance(m_XROrigin.Camera.transform.position, centre);
         }
 
+        void Notice(string message)
+        {
+            Prompt = message;
+            m_NoticeUntil = Time.time + 2.5f;
+        }
+
         void UpdatePrompt()
         {
+            // A refused tap's reason stays readable for a moment.
+            if (Time.time < m_NoticeUntil) return;
+
             if (ARSession.state != ARSessionState.SessionTracking)
             {
                 Prompt = "Waiting for tracking (" + ARSession.state + ")";
