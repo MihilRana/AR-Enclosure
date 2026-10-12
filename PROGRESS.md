@@ -6,7 +6,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 **Problem seen on the device:** ARCore sometimes makes a horizontal plane above the real floor, or several overlapping planes for one floor. Drag and measurement taps then hit the upper plane, and the panel jumps up onto it. Plane outlines also show wrong corners and overlap each other.
 
-**Step 1, diagnostics only. Status:** built, compiled clean in the Editor, waiting for the device test. Behaviour is unchanged.
+**Step 1, diagnostics only. Status:** tested on the device on 2026-10-12. The findings are below. It changed no behaviour.
 
 - New `Core/RaycastProbe.cs`: placement, drag and measurement each report their full hit list (nearest first) and which hit they used.
 - New `Diagnostics/PlaneDiagnostics.cs`, with an on-screen `PlaneReadout` between the scale readout and the buttons. It shows:
@@ -26,6 +26,53 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 3. Note the "above" value of the upper plane and whether its merged column shows "into xxxx".
 4. Measure across the floor where the overlap is, and check which plane the LAST HIT used.
 5. Pull the log: `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/plane_diagnostics.csv`
+
+**Step 1 findings (device, 2026-10-12, `plane_diagnostics.csv` and 3 screenshots)**
+
+- Two separate floor estimates existed at the same time, both fully tracked: y = -1.2915 m (3.1 m²) and y = -1.1682 m (19.8 m²), 12.3 cm apart. An earlier session showed a 15.7 cm gap. The floor is flat tile, so this is depth error, not a real surface.
+- Raycasts do not hit merged planes. At placement, 4 planes overlapped the tap but there was 1 hit. A merged plane copies its parent's height and outline. Merged planes still draw, which caused the overlapping visuals.
+- ARCore then settled on the upper estimate: all 5 planes ended at -1.167 m, with 4 merged into one. Choosing the lowest plane would have been wrong.
+- Placement happened 5.16 m away, where depth error is largest.
+
+**Step 2, floor lock. Status:** built, compiled clean in the Editor, waiting for the device test.
+
+- New `Placement/FloorLock.cs`:
+  - A usable plane is unmerged, fully tracked, horizontal and at least 0.25 m².
+  - On placement, it locks the hit plane's id and height. It follows the lock through ARCore merges and tracks drift.
+  - After placement, drag and measurement accept only the locked floor (or a plane merged into it), or a usable plane within ±3 cm of the locked height. Nearer false planes are skipped.
+  - It hides merged and small planes, but keeps the locked floor visible.
+  - Reset clears the lock.
+- Placement:
+  - It is refused while two usable planes within 1.0 m of the tap are more than 3 cm apart in height, with the message "Floor still settling (N cm apart), keep scanning".
+  - The maximum distance is now 3.5 m (it was 6 m).
+  - It uses the first usable plane hit.
+  - Refused-tap messages now stay on screen for 2.5 s. Before, they were overwritten the next frame.
+- After placement, if the locked floor drifts by more than 3 cm, the status reads "Placed. Floor estimate moved ±X cm". The panel's world anchor is unchanged.
+- Measurement: before placement it uses usable planes only. After placement it uses the locked floor only. Refused taps say why, and the reason stays on screen for 2.5 s.
+- Diagnostics:
+  - Each plane row now has a `use` column: `LOCKED`, `ok`, `off-floor`, `merged`, `small` or `limited`.
+  - A new LOCK block shows the locked id, height, current floor height and drift.
+  - The CSV is now `plane_diagnostics_v2.csv`, with added `lock_id, lock_y, lock_current_y, lock_drift_m` columns.
+- New `Core/PlaneMetrics.cs`: shared polygon area and horizontal distance helpers.
+
+**Files touched (Step 2):** `Placement/FloorLock.cs` (new), `Core/PlaneMetrics.cs` (new), `Placement/ARPlacementController.cs`, `Placement/PlacementManipulator.cs`, `Measurement/MeasurementTool.cs`, `Diagnostics/PlaneDiagnostics.cs`, `Scenes/ARPlacement.unity` (FloorLock on `/Controllers`, wired into all four components, placement limit 3.5 m).
+
+**How to test Step 2**
+
+1. Start scanning. While two floor estimates disagree, a placement tap should say "Floor still settling (N cm apart)". Keep scanning until a tap places the panel.
+2. After placement, the plane list should show one `LOCKED` row, and the LOCK block should show the locked height with a drift of about 0.0 cm.
+3. Merged and small planes should no longer be drawn, so there should be no stacked dot patterns.
+4. Drag the panel across the whole floor, including where a second plane used to appear. It should never jump up. If a hit is rejected, LAST HIT should show it was skipped and which plane was used.
+5. Measure on the floor and on a table, if one is in view. Floor taps should work, and table taps should say "That surface is not the locked floor".
+6. Tap a surface more than 3.5 m away. It should say "Step within 3.5 m".
+7. Press Reset. The LOCK block should show "none", and placing again should create a new lock.
+8. Pull the log: `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/plane_diagnostics_v2.csv`
+
+**Known issues**
+
+- After the lock, measurement is floor-only, so a table or worktop can't be measured. This is intended for now. Wall and obstacle points come in 3.3.
+- If ARCore moves the whole floor estimate after placement, the anchored panel does not move with it. The drift warning reports this; it is the documented world-anchor limitation.
+- With 8 or more planes, the plane readout may spill past its box.
 
 ## 2.5 Measurement tool
 

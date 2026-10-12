@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 24247454}
   - component: {fileID: 24247456}
   - component: {fileID: 24247457}
+  - component: {fileID: 24247458}
   m_Layer: 0
   m_Name: Controllers
   m_TagString: Untagged
@@ -176,7 +177,9 @@ MonoBehaviour:
   m_ReferenceSideOffset: 0.7
   m_MinimumTrackingSeconds: 4
   m_MinimumTrackedPlanes: 1
-  m_MaximumPlacementDistance: 6
+  m_MaximumPlacementDistance: 3.5
+  m_FloorLock: {fileID: 24247458}
+  m_NoticeSeconds: 2.5
   m_SeatModelOnSurface: 1
   m_YawOffsetDegrees: 0
   m_AttachAnchor: 1
@@ -219,6 +222,7 @@ MonoBehaviour:
   m_PlaneManager: {fileID: 1423645816}
   m_XROrigin: {fileID: 1423645815}
   m_Modes: {fileID: 24247455}
+  m_FloorLock: {fileID: 24247458}
   m_GrabMarginMetres: 0.25
   m_MaximumDragDistance: 6
 --- !u!114 &24247455
@@ -250,6 +254,7 @@ MonoBehaviour:
   m_RaycastManager: {fileID: 1423645817}
   m_PlaneManager: {fileID: 1423645816}
   m_XROrigin: {fileID: 1423645815}
+  m_FloorLock: {fileID: 24247458}
   m_MarkerMaterial: {fileID: 2100000, guid: d1e413ec516d7bb4390bebf202e60ba3, type: 2}
   m_MarkerDiameter: 0.015
   m_LineWidth: 0.004
@@ -267,10 +272,28 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ArEnclosure.Diagnostics.PlaneDiagnostics
   m_PlaneManager: {fileID: 1423645816}
+  m_FloorLock: {fileID: 24247458}
   m_Readout: {fileID: 1003362847}
   m_ShowReadout: 1
   m_WriteCsv: 1
   m_FileName: plane_diagnostics.csv
+--- !u!114 &24247458
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 24247450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d07e0f357d1595449ebf90b74c84aa2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArEnclosure.Placement.FloorLock
+  m_PlaneManager: {fileID: 1423645816}
+  m_HeightTolerance: 0.03
+  m_MinimumPlaneArea: 0.25
+  m_SettleRadius: 1
+  m_HideUnusablePlanes: 1
 --- !u!1 &77849848
 GameObject:
   m_ObjectHideFlags: 0
@@ -1350,7 +1373,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
