@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ArEnclosure.App;
 using ArEnclosure.Core;
 using Unity.XR.CoreUtils;
 using UnityEngine;
@@ -60,6 +61,9 @@ namespace ArEnclosure.Placement
 
         [SerializeField] Material m_ReferenceMaterial;
 
+        [Tooltip("Optional. When set, taps only place the panel in Move mode.")]
+        [SerializeField] AppModeController m_Modes;
+
         public event Action<PlacementReport> Placed;
         public event Action Cleared;
 
@@ -117,6 +121,14 @@ namespace ArEnclosure.Placement
             if (!ReadyToPlace(out var blockedReason))
             {
                 Status = blockedReason;
+                return;
+            }
+
+            // Other tools own taps in their own modes, so a measurement tap
+            // must not also drop the panel.
+            if (m_Modes != null && m_Modes.Current != AppMode.Move)
+            {
+                Status = "Switch to Move mode to place.";
                 return;
             }
 
