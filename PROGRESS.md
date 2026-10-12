@@ -4,7 +4,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 2.5 Measurement tool
 
-**Status:** first device test on 2026-10-12 passed steps 1 to 7 (run_id 1 to 26, carried across a restart). Found a tap-through bug, now fixed. Waiting for a re-test.
+**Status:** tested on the Pixel 9a on 2026-10-12. The first test passed steps 1 to 7 (run_id 1 to 26, carried across a restart) and found a tap-through bug. The fix passed its re-test (runs 27 to 35). Merged and tagged `task-2.5`.
 
 **Fix: UI tap-through.** A button press also counted as an AR tap behind it. For example, pressing Close loop added a fifth corner, as in runs 18 and 21, which logged 5 points for 4 corners. Those two CSV rows are invalid.
 - New `Core/UiTouchFilter`: once per frame it checks each new touch with `EventSystem.RaycastAll` at the touch position. A finger that begins over UI stays blocked until it lifts.
@@ -62,7 +62,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 **Known issues**
 
-- Rows from runs 18 and 21 in `measurements.csv` have an extra point added by the tap-through bug. Leave them out of the accuracy analysis.
+- Runs 1 to 26 in `measurements.csv` were logged before the tap-through fix. Runs 18 and 21 are confirmed to have an extra point. Run 23 (perimeter, 5 points) was also logged before the fix and may be affected. Use runs 27 and later for the accuracy analysis, or check each earlier perimeter against your notes.
 - Only horizontal planes are detected for now (vertical detection is a 3.3 decision), so measurement points can only go on floors and tables, not walls.
 - Taps land on the inside of a detected plane outline only. If a corner is outside the detected area, the tap is refused with "No tracked surface under that tap".
 
