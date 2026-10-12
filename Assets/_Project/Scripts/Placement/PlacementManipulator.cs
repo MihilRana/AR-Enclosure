@@ -22,8 +22,13 @@ namespace ArEnclosure.Placement
     public struct ManipulationReport
     {
         public ManipulationKind Kind;
+        /// <summary>
+        /// Horizontal travel of the base centre. Not the FBX pivot, which sits
+        /// 0.82 m off-centre and would report a pure turn as movement.
+        /// </summary>
         public float MovedMetres;
         public float TurnedDegrees;
+        /// <summary>World position of the base centre after the gesture.</summary>
         public Vector3 FinalPosition;
         public float FinalYaw;
         public bool Reanchored;
@@ -50,6 +55,8 @@ namespace ArEnclosure.Placement
         [SerializeField] XROrigin m_XROrigin;
         [Tooltip("Optional. When set, gestures only work in Move mode.")]
         [SerializeField] AppModeController m_Modes;
+        [Tooltip("Optional. Restricts drag to the floor locked at placement.")]
+        [SerializeField] FloorLock m_FloorLock;
 
         [Header("Gestures")]
         [Tooltip("A drag starts if the finger lands within this distance of the panel box.")]
@@ -111,6 +118,7 @@ namespace ArEnclosure.Placement
             if (m_XROrigin == null) m_XROrigin = FindAnyObjectByType<XROrigin>();
             if (m_RaycastManager == null) m_RaycastManager = FindAnyObjectByType<ARRaycastManager>();
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
+            if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
         }
 
         void OnEnable()
@@ -256,7 +264,7 @@ namespace ArEnclosure.Placement
         void BeginGesture(GameObject instance, ManipulationKind kind)
         {
             m_KindThisGesture = kind;
-            m_StartPosition = instance.transform.position;
+            m_StartPosition = instance.transform.TransformPoint(BaseCentreLocal());
             m_StartYaw = instance.transform.eulerAngles.y;
 
             var anchor = instance.GetComponent<ARAnchor>();
@@ -293,8 +301,11 @@ namespace ArEnclosure.Placement
                 reanchored = true;
             }
 
+            // Measured at the base centre, the point the twist pivots on, so a
+            // pure turn reports 0 m moved.
             var t = instance.transform;
-            var moved = t.position - m_StartPosition;
+            var baseCentre = t.TransformPoint(BaseCentreLocal());
+            var moved = baseCentre - m_StartPosition;
             moved.y = 0f;
 
             ManipulationEnded?.Invoke(new ManipulationReport
@@ -302,7 +313,7 @@ namespace ArEnclosure.Placement
                 Kind = m_KindThisGesture,
                 MovedMetres = moved.magnitude,
                 TurnedDegrees = Mathf.DeltaAngle(m_StartYaw, t.eulerAngles.y),
-                FinalPosition = t.position,
+                FinalPosition = baseCentre,
                 FinalYaw = t.eulerAngles.y,
                 Reanchored = reanchored
             });
@@ -399,7 +410,21 @@ namespace ArEnclosure.Placement
         {
             point = default;
             if (m_RaycastManager == null) return false;
-            if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon)) return false;
+            if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
+            {
+                RaycastProbe.Record("drag", m_Hits, -1);
+                return false;
+            }
+
+            // With a floor lock, only the locked floor can carry the panel, so a
+            // nearer false plane above it no longer wins.
+            if (m_FloorLock != null)
+            {
+                var picked = m_FloorLock.TryPickHit(m_Hits, m_MaximumDragDistance, out var index, out _);
+                RaycastProbe.Record("drag", m_Hits, index);
+                if (picked) point = m_Hits[index].pose.position;
+                return picked;
+            }
 
             for (var i = 0; i < m_Hits.Count; i++)
             {
@@ -409,10 +434,12 @@ namespace ArEnclosure.Placement
                 var plane = m_PlaneManager != null ? m_PlaneManager.GetPlane(hit.trackableId) : null;
                 if (plane != null && plane.alignment != PlaneAlignment.HorizontalUp) continue;
 
+                RaycastProbe.Record("drag", m_Hits, i);
                 point = hit.pose.position;
                 return true;
             }
 
+            RaycastProbe.Record("drag", m_Hits, -1);
             return false;
         }
 
