@@ -38,6 +38,18 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - `FloorLock.FindConflicts` returns the nearest-above and nearest-below usable planes near the candidate, beyond the ±3 cm band.
 - The outline settings were renamed to ring settings with `FormerlySerializedAs`, so the scene kept its material and colour. The scene was checked.
 
+**Device test 3 (2026-10-13), floor ring:** the offer, the hidden dots, the warnings (for example "21 cm below (likely reflection)", and "11 cm above" plus "33 cm below" in another session), confirm, place, drag, measure, obstacles and Reset all passed.
+
+- The ring check **failed by design**: the ring was redrawn under the screen centre every frame, so it followed the phone at any height and could never show parallax.
+
+**Fix: fixed ring (the last floor change)**
+
+- When a floor is offered, the ring is dropped once where the screen centre meets the candidate's height, and then stays fixed in the world. Only its height follows the candidate, which stays within ±3 cm while the offer stands.
+- If the screen centre is not on the floor within 4 m, the ring waits until it is. The prompt reads "Point at open floor to drop the ring".
+- Once dropped, the prompt reads "Move the phone sideways: the ring must stay on the same tile. If it slides, press Rescan."
+- A new **Move ring here** button (bottom left, in the 180 slot, Move mode, only during an offer) re-drops the ring at the current screen centre.
+- The ring is dropped again whenever the offer is replaced or withdrawn.
+
 **Why:** ARCore keeps creating, merging and moving planes for the whole session. Each new plane is another chance for a false floor, and the floor in session 2 moved 10 cm. Once the user has accepted a floor, there is nothing more to find.
 
 **What was built**
@@ -78,7 +90,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 **How to test**
 
 1. Start the app and scan the floor. For the first 8 s it should read "Scanning for the floor (N s)", then "Checking the floor", then "Floor found (N m2)" with the ring prompt and up to two warning lines (above and below). No planes should be drawn while the floor is offered. A green ring with a cross should follow the centre of the screen on the floor, and the buttons should stay while other planes appear.
-1b. Ring check: aim the cross at a grout corner and move the phone sideways about 30 cm, keeping the cross roughly there. On the real floor the ring stays on that tile. Press Rescan if it slides.
+1b. Ring check: when the ring drops, note the tile and grout corner under its cross. Step or move the phone about 30 to 50 cm sideways. On the real floor, the ring stays on that tile. On a reflection plane it slides and looks sunk below the tiles. On a false upper plane it slides and looks raised. Press Move ring here to re-drop it, or Rescan if it slides.
 2. Tap the floor before confirming. It should say "Confirm the floor first" and place nothing.
 3. Press Rescan. The outline should go. The same plane should only come back after it changes, while another floor can be offered meanwhile.
 4. Press Use this floor. The outline should go, the debug readout should show PLANE FINDING off, and the PLANES count should stop going up while you walk around.
