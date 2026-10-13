@@ -20,6 +20,8 @@ namespace ArEnclosure.UI
         [Tooltip("Shown in Move mode while a settled floor is offered.")]
         [SerializeField] Button m_UseFloorButton;
         [SerializeField] Button m_RescanButton;
+        [Tooltip("Re-drops the floor ring at the screen centre. Shown with the other offer buttons.")]
+        [SerializeField] Button m_MoveRingButton;
 
         void Awake()
         {
@@ -33,6 +35,7 @@ namespace ArEnclosure.UI
             if (m_ReseatButton != null) m_ReseatButton.onClick.AddListener(OnReseatPressed);
             if (m_UseFloorButton != null) m_UseFloorButton.onClick.AddListener(OnUseFloorPressed);
             if (m_RescanButton != null) m_RescanButton.onClick.AddListener(OnRescanPressed);
+            if (m_MoveRingButton != null) m_MoveRingButton.onClick.AddListener(OnMoveRingPressed);
         }
 
         void OnDisable()
@@ -40,11 +43,13 @@ namespace ArEnclosure.UI
             if (m_ReseatButton != null) m_ReseatButton.onClick.RemoveListener(OnReseatPressed);
             if (m_UseFloorButton != null) m_UseFloorButton.onClick.RemoveListener(OnUseFloorPressed);
             if (m_RescanButton != null) m_RescanButton.onClick.RemoveListener(OnRescanPressed);
+            if (m_MoveRingButton != null) m_MoveRingButton.onClick.RemoveListener(OnMoveRingPressed);
         }
 
         void OnReseatPressed() => m_Placement.ReseatOnFloor();
         void OnUseFloorPressed() => m_FloorConfirm.Confirm();
         void OnRescanPressed() => m_FloorConfirm.Rescan();
+        void OnMoveRingPressed() => m_FloorConfirm.MoveRingHere();
 
         void Update()
         {
@@ -56,6 +61,7 @@ namespace ArEnclosure.UI
                         (m_Modes == null || m_Modes.Current == AppMode.Move);
             SetVisible(m_UseFloorButton, offer);
             SetVisible(m_RescanButton, offer);
+            SetVisible(m_MoveRingButton, offer);
         }
 
         static void SetVisible(Component c, bool visible)

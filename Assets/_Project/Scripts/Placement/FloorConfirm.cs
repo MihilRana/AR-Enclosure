@@ -20,11 +20,13 @@ namespace ArEnclosure.Placement
     /// the user confirm. Once offered, the offer stays until the candidate
     /// merges, moves beyond the band, or a much larger plane appears.
     ///
-    /// The user checks the offer with a floor ring: a circle at the
-    /// candidate's height where the centre of the screen points. At the right
-    /// height it stays on one tile as the phone moves; at the wrong height it
-    /// slides (parallax). Plane outlines are not drawn during the offer, because
-    /// they reach past walls and make a correct floor look wrong.
+    /// The user checks the offer with a floor ring. It is dropped once where
+    /// the centre of the screen meets the candidate's height, then stays fixed
+    /// in the world. Walking or moving the phone sideways shows the truth: at
+    /// the right height the ring stays on the same tile, at a wrong height it
+    /// slides across the tiles (parallax). Move ring here re-drops it at the
+    /// current screen centre. Plane outlines are not drawn during the offer,
+    /// because they reach past walls and make a correct floor look wrong.
     ///
     /// Confirming locks the floor and stops plane finding; existing planes
     /// keep tracking, so drift is still measured. Rescan skips the offered
@@ -84,6 +86,8 @@ namespace ArEnclosure.Placement
         LineRenderer m_Ring;
         LineRenderer m_Cross;
         MaterialPropertyBlock m_Block;
+        bool m_RingPlaced;
+        Vector3 m_RingPoint;
 
         void Awake()
         {
@@ -126,7 +130,9 @@ namespace ArEnclosure.Placement
             {
                 UpdateWarning();
                 Status = "Floor found (" + PlaneMetrics.Area(m_Candidate).ToString("F1") + " m2).\n" +
-                         "Point at open floor. The ring must stay on one tile as you move the phone." +
+                         (m_RingPlaced
+                             ? "Move the phone sideways: the ring must stay on the same tile. If it slides, press Rescan."
+                             : "Point at open floor to drop the ring.") +
                          (Warning.Length > 0 ? "\n" + Warning : "") +
                          "\nUse this floor?";
             }
@@ -154,6 +160,12 @@ namespace ArEnclosure.Placement
             m_Candidate = null;
             Warning = string.Empty;
             Status = "Floor confirmed. Tap the floor to place.";
+        }
+
+        /// <summary>Re-drop the ring at the current screen centre.</summary>
+        public void MoveRingHere()
+        {
+            m_RingPlaced = false;
         }
 
         /// <summary>
@@ -288,42 +300,37 @@ namespace ArEnclosure.Placement
             HasOffer = false;
             m_Candidate = null;
             Warning = string.Empty;
+            m_RingPlaced = false;
             if (m_FloorLock != null) m_FloorLock.HideAllPlanes = false;
         }
 
         /// <summary>
-        /// Ring and cross at the candidate's height under the screen centre.
-        /// Pure maths, independent of the plane outline, so it shows exactly
-        /// the height the lock would use.
+        /// Ring and cross fixed in the world at the candidate's height. Dropped
+        /// once where the screen centre meets that height, then left in place,
+        /// so moving the phone reveals parallax if the height is wrong. Pure
+        /// maths, independent of the plane outline, so it shows exactly the
+        /// height the lock would use.
         /// </summary>
         void UpdateRing()
         {
-            var show = HasOffer && m_Candidate != null && m_XROrigin != null && m_XROrigin.Camera != null;
-            var centre = Vector3.zero;
+            var active = HasOffer && m_Candidate != null && m_XROrigin != null && m_XROrigin.Camera != null;
+            if (!active) m_RingPlaced = false;
 
-            if (show)
+            if (active && !m_RingPlaced && TryScreenCentreHit(out var drop))
             {
-                var camera = m_XROrigin.Camera;
-                var ray = camera.ScreenPointToRay(new Vector2(camera.pixelWidth * 0.5f, camera.pixelHeight * 0.5f));
-                var height = m_Candidate.transform.position.y;
-                var along = ray.direction.y < -0.087f ? (height - ray.origin.y) / ray.direction.y : -1f;
-                if (along > 0f)
-                {
-                    centre = ray.GetPoint(along);
-                    show = Vector3.Distance(camera.transform.position, centre) <= m_RingMaxDistance;
-                }
-                else
-                {
-                    show = false;
-                }
+                m_RingPoint = drop;
+                m_RingPlaced = true;
             }
 
+            var show = active && m_RingPlaced;
             EnsureRing();
             m_Ring.enabled = show;
             m_Cross.enabled = show;
             if (!show) return;
 
-            centre.y += 0.003f;
+            // Fixed position on the floor; only the height follows the candidate,
+            // which stays within the band while the offer stands.
+            var centre = new Vector3(m_RingPoint.x, m_Candidate.transform.position.y + 0.003f, m_RingPoint.z);
             for (var i = 0; i < k_RingSegments; i++)
             {
                 var a = i * Mathf.PI * 2f / k_RingSegments;
@@ -337,6 +344,20 @@ namespace ArEnclosure.Placement
             m_Cross.SetPosition(2, centre);
             m_Cross.SetPosition(3, centre + Vector3.forward * arm);
             m_Cross.SetPosition(4, centre + Vector3.back * arm);
+        }
+
+        bool TryScreenCentreHit(out Vector3 point)
+        {
+            point = default;
+            var camera = m_XROrigin.Camera;
+            var ray = camera.ScreenPointToRay(new Vector2(camera.pixelWidth * 0.5f, camera.pixelHeight * 0.5f));
+            if (ray.direction.y > -0.087f) return false;
+
+            var along = (m_Candidate.transform.position.y - ray.origin.y) / ray.direction.y;
+            if (along <= 0f) return false;
+
+            point = ray.GetPoint(along);
+            return Vector3.Distance(camera.transform.position, point) <= m_RingMaxDistance;
         }
 
         void EnsureRing()
