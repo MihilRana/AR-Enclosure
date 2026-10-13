@@ -4,7 +4,21 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 3.2 to 3.4 Obstacles and rule engine, Phase A (demo)
 
-**Status:** built, compiled clean, engine tested in the Editor, Play mode test passed. Waiting for the device test.
+**Status:** device test passed on the Pixel 9a on 2026-10-13.
+
+**Device test, 2026-10-13, 16:21 to 16:38, two sessions** (`rule_checks.csv`: 248 rows, 31 checks; `obstacles.csv`; 6 screenshots)
+
+- Placement showed INCOMPLETE with "3 manufacturer gaps not entered" and "Door leaf 0.587 m". Pass.
+- The wall line and fence appeared. Undo removed the newest lines in order, Kind switched to Enclosure, and Clear obstacles worked (obstacles.csv rows 4 to 8). Pass.
+- Thresholds: front_gangway failed below 0.700, front_handle_clearance below 0.600, and door_swing_90 below 0.587 (screenshot 2, all three FAIL at 0.546 m). Moving back gave COMPLIANT (IEC 60364-7-729 checks) at 0.733 to 0.920 m. Pass.
+- Debug off hides the readouts. Pass.
+- Rotate on the device reads "moved 0.000 m, turned 91.8 deg", which confirms the 2.5b base-centre fix.
+- Logging only on change: 31 checks over about 17 minutes. Verdict counts: 11 Compliant, 4 NotCompliant, 16 Incomplete.
+- Check 13 was INCOMPLETE with 2 obstacles: after a drag, no wall was in the strip in front of the door side. This is correct.
+- The Re-seat button appeared on the device (drift -3.8 cm in session 1, +10.0 to +11.3 cm in session 2), so its show and hide logic is verified. Pressing it is still to be confirmed.
+- Session 2 floor move: the locked plane 4011 (y -1.020) was merged by ARCore into 3270, 10 cm higher. This is the third time ARCore has settled on the upper estimate. The gaps are horizontal, so the verdicts are unaffected by the height change, but the panel looked sunk until re-seated.
+- Not yet done: a tape comparison of front_gangway against a real floor measurement.
+- Cosmetic: with Debug on, long scale-readout lines run under the verdict panel. Use Debug off for demos; to be fixed in Phase B.
 
 **Decisions (2026-10-13)**
 
