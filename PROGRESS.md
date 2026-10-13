@@ -4,7 +4,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 3.2b Confirm the floor, then stop plane finding
 
-**Status:** first device test failed on the reflective tile floor. The settling gate was changed from blocking to advising (below). Built and compiled clean, waiting for the device re-test. The demo fallback is `demo_3.4a.apk`.
+**Status:** passed on the device on 2026-10-14 after four test rounds (blocking gate, then advising gate, then a ring under the screen centre, then a fixed ring). Merged and tagged `task-3.2b`.
 
 **Device test 1 (2026-10-13), confirm flow failed**
 
@@ -49,6 +49,16 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - Once dropped, the prompt reads "Move the phone sideways: the ring must stay on the same tile. If it slides, press Rescan."
 - A new **Move ring here** button (bottom left, in the 180 slot, Move mode, only during an offer) re-drops the ring at the current screen centre.
 - The ring is dropped again whenever the offer is replaced or withdrawn.
+
+**Device test 4 (2026-10-14), fixed ring: passed.**
+
+- The ring dropped and the prompt changed. Stepping sideways, the ring stayed on its tile on the real floor.
+- One offer needed Rescan, and Rescan fixed it.
+- Confirm, place, drag, measure, obstacles and Reset all worked.
+- Move ring here: not confirmed in this test ("no" in the report). It is listed as unverified.
+- Build note: one build failed because Gradle could not delete `libc++_shared.so` in `Library/Bee/.../intermediates/cxx/.../obj/arm64-v8a`. That file is a hard link to the NDK's admin-owned copy in `E:\Program Files` (project and Unity are on the same drive), so it carries read-only permissions. It was fixed by deleting the link from an administrator PowerShell; the NDK file is untouched. This can recur when Gradle reconfigures the native build.
+
+**3.2b status:** passed on the Pixel 9a. Merged and tagged `task-3.2b`.
 
 **Why:** ARCore keeps creating, merging and moving planes for the whole session. Each new plane is another chance for a false floor, and the floor in session 2 moved 10 cm. Once the user has accepted a floor, there is nothing more to find.
 
