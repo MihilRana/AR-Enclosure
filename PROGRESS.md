@@ -2,6 +2,20 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 3.2 to 3.4 Phase B (on hold)
+
+**Status:** not started. On hold until the user says "go" after the meeting on 2026-10-14. Branch to use: `task-3.4b`, from `master`.
+
+**Decisions already made (2026-10-14)**
+
+- Condition toggles for `applies_if`: area (not set / closed restricted), doors lock open (off / on), gangway longer than 10 m (off / on). All default to off.
+- Vent gap inputs for back, side and top, in metres. An empty field means "not entered" (skipped).
+- **Ceiling height field: yes.** The top gap = ceiling height minus the panel top (1.925 m).
+- **Persistence: yes.** Conditions, vent values and ceiling height are saved between launches in `clearance_inputs.json` in `persistentDataPath`, with a **"Reset inputs"** button that clears them.
+- **`DOL_*` parts: no code.** The user will check the model later. If they are door leaves, it is a `model_profile.json` change only.
+- **Debug layout fix: yes.** Narrow the scale readout so its lines wrap, and shorten its long status lines, so nothing runs under the verdict panel with Debug on.
+- First item when Phase B starts: check why the "Move ring here" button was not seen on the device in the 3.2b test.
+
 ## 3.2b Confirm the floor, then stop plane finding
 
 **Status:** passed on the device on 2026-10-14 after four test rounds (blocking gate, then advising gate, then a ring under the screen centre, then a fixed ring). Merged and tagged `task-3.2b`.
@@ -55,7 +69,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - The ring dropped and the prompt changed. Stepping sideways, the ring stayed on its tile on the real floor.
 - One offer needed Rescan, and Rescan fixed it.
 - Confirm, place, drag, measure, obstacles and Reset all worked.
-- Move ring here: not confirmed in this test ("no" in the report). It is listed as unverified.
+- Move ring here: not tried, and the button was **not seen** on the device. Unverified; possibly not showing. To be checked at the start of Phase B.
 - Build note: one build failed because Gradle could not delete `libc++_shared.so` in `Library/Bee/.../intermediates/cxx/.../obj/arm64-v8a`. That file is a hard link to the NDK's admin-owned copy in `E:\Program Files` (project and Unity are on the same drive), so it carries read-only permissions. It was fixed by deleting the link from an administrator PowerShell; the NDK file is untouched. This can recur when Gradle reconfigures the native build.
 
 **3.2b status:** passed on the Pixel 9a. Merged and tagged `task-3.2b`.
