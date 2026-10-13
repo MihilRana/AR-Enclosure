@@ -46,6 +46,8 @@ namespace ArEnclosure.Measurement
         [SerializeField] XROrigin m_XROrigin;
         [Tooltip("Optional. Ignores small or merged planes, and after placement only accepts the locked floor.")]
         [SerializeField] FloorLock m_FloorLock;
+        [Tooltip("After the floor is locked, taps further than this are refused.")]
+        [SerializeField] float m_MaximumFloorDistance = 3.5f;
 
         [Header("Visuals")]
         [Tooltip("URP Unlit material asset. Referenced, never Shader.Find, so IL2CPP keeps the shader.")]
@@ -76,6 +78,7 @@ namespace ArEnclosure.Measurement
         LineRenderer m_Line;
         bool m_AllPlanesTracking = true;
         float m_NoticeUntil = -1f;
+        bool m_UsedLockedFloor;
 
         void Awake()
         {
@@ -148,6 +151,29 @@ namespace ArEnclosure.Measurement
 
         void HandleTap(Vector2 screenPoint)
         {
+            // Locked floor: the tap meets an endless flat plane at the floor's
+            // current height, so it works anywhere on the floor.
+            if (m_FloorLock != null && m_FloorLock.HasLock && m_XROrigin != null)
+            {
+                var onFloor = m_FloorLock.TryRayFloor(m_XROrigin.Camera, screenPoint, m_MaximumFloorDistance,
+                    out var floorPoint, out var floorDistance, out var floorRejection);
+                RaycastProbe.RecordFloor("measure_floor", m_FloorLock.CurrentId, onFloor, floorPoint, floorDistance);
+                if (!onFloor)
+                {
+                    Notice(floorRejection == HitRejection.TooFar
+                        ? "Too far. Step within " + m_MaximumFloorDistance.ToString("F1") + " m."
+                        : "Tap the floor, below the horizon.");
+                    return;
+                }
+
+                if (IsComplete) ClearPoints();
+                m_UsedLockedFloor = true;
+                AddPoint(floorPoint);
+                if (Kind == MeasureKind.Distance && m_Points.Count == 2)
+                    Complete(Vector3.Distance(m_Points[0], m_Points[1]));
+                return;
+            }
+
             if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
             {
                 RaycastProbe.Record("measure", m_Hits, -1);
@@ -186,7 +212,7 @@ namespace ArEnclosure.Measurement
 
             var points = m_Points.ToArray();
             var cameraDistance = CameraDistanceTo(points);
-            var tracking = ARSession.state + "|" + (m_AllPlanesTracking ? "PlanesTracking" : "PlaneLimited");
+            var tracking = ARSession.state + "|" + (m_UsedLockedFloor ? "LockedFloor" : m_AllPlanesTracking ? "PlanesTracking" : "PlaneLimited");
             var runId = m_Log.NextRunId;
             var mode = Kind == MeasureKind.Distance ? "distance" : "perimeter";
 
@@ -302,6 +328,7 @@ namespace ArEnclosure.Measurement
 
             IsComplete = false;
             m_AllPlanesTracking = true;
+            m_UsedLockedFloor = false;
         }
 
         bool TryGetTap(out Vector2 screenPoint)

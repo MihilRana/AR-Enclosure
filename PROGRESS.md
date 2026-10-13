@@ -2,6 +2,119 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 3.2b Confirm the floor, then stop plane finding
+
+**Status:** passed on the device on 2026-10-14 after four test rounds (blocking gate, then advising gate, then a ring under the screen centre, then a fixed ring). Merged and tagged `task-3.2b`.
+
+**Device test 1 (2026-10-13), confirm flow failed**
+
+- At 6.8 s, plane 2d30 (2.6 m²) was offered too early. It later turned out to sit 21 cm below the main floor, most likely a reflection.
+- At 13.5 s, plane 5c33 appeared 21 cm away. The gate withdrew the offer and the buttons vanished.
+- At 78.5 s there were 9 planes spread over 55 cm. Plane 1377 (16 m²) was the real floor. Plane a011 sat 55 cm below it, a reflection that never merges, so the gate could never settle and the buttons never came back.
+- Conclusion: on a glossy floor, a "no conflicting planes" rule can never be met. Conflicts must be advice, not a block.
+
+**Change: advising gate**
+
+- Candidate: the largest usable plane, not skipped by Rescan. It is offered only after 8 s of tracking, if its area is at least 1.0 m², and once its own height has stayed within ±3 cm for 2 s.
+- Once offered, the buttons stay. The offer is replaced only if the candidate merges or disappears, its height moves more than 3 cm, or a usable plane at least 1.5× its area appears. Any replacement goes through the 2 s hold again. Other planes appearing do not hide the buttons.
+- Conflicting planes become a warning under the offer: "Another surface N cm below (likely reflection)." or "Another surface N cm above (table, step or false floor?)." The user still decides.
+- Rescan rule unchanged: the plane is skipped until it merges, disappears, or moves more than 3 cm.
+- The settings have new field names (`m_MinTrackingSeconds` 8, `m_MinCandidateArea` 1.0, `m_HoldSeconds` 2, `m_LargerFactor` 1.5). The old serialized values could not override them, and the scene was checked to hold the new values.
+- `FloorLock.IsPlaneSettled` was replaced by a conflict finder (see below).
+
+**Device test 2 (2026-10-13), advising gate:** the offer came after about 8 s on the big floor. The buttons stayed while sweeping. Rescan worked. After confirming, the plane count stopped growing, taps worked outside the outline, taps on the sky were refused, and Reset worked.
+
+- Problem: the outline appeared on the wrong surface many times.
+  - In shot 19, the offered plane `3e57` was at floor height, but its outline and dots ran over the wall, curtain and table, because ARCore's outline reaches past walls and nothing hides it behind them. Once confirmed, the panel sat correctly.
+  - In session 2, two large planes 37 cm apart overlapped (`0797` 24 m² and `c8d7` 11 m²). The rule picked `0797`, and the panel looked seated on the tiles, so `c8d7` was the reflection.
+  - The warning showed only the biggest gap, so `c8d7` (34 cm below) was hidden behind `7370` (37 cm above).
+- Conclusion: the outline is the wrong tool for judging the floor height. Which plane is chosen is unchanged, because the largest plane was correct in both sessions.
+
+**Change: floor ring (the last floor change before Phase B)**
+
+- While a floor is offered, no plane outline or dots are drawn (`FloorLock.HideAllPlanes`).
+- Instead, a green ring (0.4 m across, with a small centre cross) is drawn at the candidate's height, where the centre of the screen meets it, within 4 m. The prompt reads "Point at open floor. The ring must stay on one tile as you move the phone." At the right height the ring stays on one tile as the phone moves; at a wrong height it slides across the tiles.
+- The warning now lists the nearest conflicting surface above and the nearest below, each with its area, for example "Surface 37 cm above (2.8 m2, table, step or false floor?)." and "Surface 34 cm below (10.9 m2, likely reflection).".
+- `FloorLock.FindConflicts` returns the nearest-above and nearest-below usable planes near the candidate, beyond the ±3 cm band.
+- The outline settings were renamed to ring settings with `FormerlySerializedAs`, so the scene kept its material and colour. The scene was checked.
+
+**Device test 3 (2026-10-13), floor ring:** the offer, the hidden dots, the warnings (for example "21 cm below (likely reflection)", and "11 cm above" plus "33 cm below" in another session), confirm, place, drag, measure, obstacles and Reset all passed.
+
+- The ring check **failed by design**: the ring was redrawn under the screen centre every frame, so it followed the phone at any height and could never show parallax.
+
+**Fix: fixed ring (the last floor change)**
+
+- When a floor is offered, the ring is dropped once where the screen centre meets the candidate's height, and then stays fixed in the world. Only its height follows the candidate, which stays within ±3 cm while the offer stands.
+- If the screen centre is not on the floor within 4 m, the ring waits until it is. The prompt reads "Point at open floor to drop the ring".
+- Once dropped, the prompt reads "Move the phone sideways: the ring must stay on the same tile. If it slides, press Rescan."
+- A new **Move ring here** button (bottom left, in the 180 slot, Move mode, only during an offer) re-drops the ring at the current screen centre.
+- The ring is dropped again whenever the offer is replaced or withdrawn.
+
+**Device test 4 (2026-10-14), fixed ring: passed.**
+
+- The ring dropped and the prompt changed. Stepping sideways, the ring stayed on its tile on the real floor.
+- One offer needed Rescan, and Rescan fixed it.
+- Confirm, place, drag, measure, obstacles and Reset all worked.
+- Move ring here: not confirmed in this test ("no" in the report). It is listed as unverified.
+- Build note: one build failed because Gradle could not delete `libc++_shared.so` in `Library/Bee/.../intermediates/cxx/.../obj/arm64-v8a`. That file is a hard link to the NDK's admin-owned copy in `E:\Program Files` (project and Unity are on the same drive), so it carries read-only permissions. It was fixed by deleting the link from an administrator PowerShell; the NDK file is untouched. This can recur when Gradle reconfigures the native build.
+
+**3.2b status:** passed on the Pixel 9a. Merged and tagged `task-3.2b`.
+
+**Why:** ARCore keeps creating, merging and moving planes for the whole session. Each new plane is another chance for a false floor, and the floor in session 2 moved 10 cm. Once the user has accepted a floor, there is nothing more to find.
+
+**What was built**
+
+- New `Placement/FloorConfirm.cs`:
+  - The candidate is the largest usable plane (unmerged, fully tracked, horizontal, at least 0.25 m²).
+  - It is offered when no other usable plane near its outline (within 1.0 m) differs in height by more than 3 cm, and that has held for 1.5 s. Its height must stay within 1 cm during that time.
+  - While offered, only that plane is drawn, with a green outline. In Move mode two buttons appear: "Use this floor" and "Rescan".
+  - **Use this floor:** locks the floor on that plane and sets `ARPlaneManager.requestedDetectionMode = None`. Existing planes keep tracking, so drift is still measured. Only the locked floor is drawn.
+  - **Rescan:** skips the offered plane until ARCore changes it, that is until it merges into another plane, disappears, or its height moves more than 3 cm. It can then be offered again. Other planes can be offered in the meantime.
+  - **Reset:** restores the detection mode set in the inspector (Horizontal), clears the skip list and the candidate, and starts searching again.
+- `FloorLock.TryRayFloor`:
+  - After the lock, a tap meets an endless flat plane at the floor's current height, so it works anywhere on the floor.
+  - Rays less than about 5° below the horizon are refused, and so are hits beyond the distance limit. The distance is measured from the camera, not from the near clip plane.
+  - `FloorLock.IsPlaneSettled` applies the ±3 cm and 1 m rules to a whole plane.
+- Using the flat floor plane after the lock:
+  - placement (3.5 m limit);
+  - drag (6 m, unchanged);
+  - measurement (3.5 m; these runs are tagged `LockedFloor` in the `tracking_state` column of measurements.csv);
+  - obstacle marking (3.5 m).
+
+  Before the lock, all of them work exactly as before.
+- Placement: until a floor is confirmed, a tap shows "Confirm the floor first". The warm-up gate still applies.
+- The clearance panel shows the placement status before placement, so the floor prompts can be read with Debug off.
+- Diagnostics: a "PLANE FINDING" line in the readout. Taps on the flat floor plane are logged as `place_floor`, `drag_floor`, `measure_floor` and `obstacle_floor`, with the locked plane's id.
+- Unchanged: drift readout, Re-seat, the ±3 cm band, the rule engine, obstacle storage, and all CSV layouts.
+
+**Editor check:** with a floor at y = -1.2 m and the camera at the origin:
+
+| Camera pitch | Result |
+|---|---|
+| 45° down | hit at (0, -1.2, 1.2), 1.697 m away |
+| 10° down | 6.91 m, refused as too far |
+| 20° up | refused as above the horizon |
+
+**Files touched:** `Placement/FloorConfirm.cs` (new), `Placement/FloorLock.cs`, `Placement/ARPlacementController.cs`, `Placement/PlacementManipulator.cs`, `Measurement/MeasurementTool.cs`, `Obstacles/ObstacleTool.cs`, `UI/PlacementHUD.cs`, `UI/ClearanceHUD.cs`, `Diagnostics/PlaneDiagnostics.cs`, `Core/RaycastProbe.cs`, `Scenes/ARPlacement.unity` (FloorConfirm on `/Controllers`, plus `UseFloorButton` and `RescanButton`).
+
+**How to test**
+
+1. Start the app and scan the floor. For the first 8 s it should read "Scanning for the floor (N s)", then "Checking the floor", then "Floor found (N m2)" with the ring prompt and up to two warning lines (above and below). No planes should be drawn while the floor is offered. A green ring with a cross should follow the centre of the screen on the floor, and the buttons should stay while other planes appear.
+1b. Ring check: when the ring drops, note the tile and grout corner under its cross. Step or move the phone about 30 to 50 cm sideways. On the real floor, the ring stays on that tile. On a reflection plane it slides and looks sunk below the tiles. On a false upper plane it slides and looks raised. Press Move ring here to re-drop it, or Rescan if it slides.
+2. Tap the floor before confirming. It should say "Confirm the floor first" and place nothing.
+3. Press Rescan. The outline should go. The same plane should only come back after it changes, while another floor can be offered meanwhile.
+4. Press Use this floor. The outline should go, the debug readout should show PLANE FINDING off, and the PLANES count should stop going up while you walk around.
+5. Place the panel well outside the old plane outline. It should work up to 3.5 m. Drag it across the whole floor; it should not stop at outline edges. Measure and mark obstacles away from the drawn plane.
+6. Tap a wall above the floor line, or the sky through a window. It should say "Tap the floor, below the horizon".
+7. Re-seat and drift should work as before.
+8. Press Reset. Plane finding should come back on, planes should be drawn, and the search should start again.
+9. Tape-check one front_gangway reading against a measurement taken away from the original plane outline.
+
+**Known issues**
+
+- A tap on a wall in the camera image meets the floor plane behind the wall. For obstacle marking, tap where the wall meets the floor.
+- With plane finding off, ARCore no longer refines the floor outline. Only the floor's height is used after confirming, so this does not matter.
+
 ## 3.2 to 3.4 Obstacles and rule engine, Phase A (demo)
 
 **Status:** device test passed on the Pixel 9a on 2026-10-13.
@@ -17,7 +130,8 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - Check 13 was INCOMPLETE with 2 obstacles: after a drag, no wall was in the strip in front of the door side. This is correct.
 - The Re-seat button appeared on the device (drift -3.8 cm in session 1, +10.0 to +11.3 cm in session 2), so its show and hide logic is verified. Pressing it is still to be confirmed.
 - Session 2 floor move: the locked plane 4011 (y -1.020) was merged by ARCore into 3270, 10 cm higher. This is the third time ARCore has settled on the upper estimate. The gaps are horizontal, so the verdicts are unaffected by the height change, but the panel looked sunk until re-seated.
-- Not yet done: a tape comparison of front_gangway against a real floor measurement.
+- Tape comparison (2026-10-13, 17:49): front_gangway read **0.727 m** (rule_checks.csv, 17:49:25) against **0.73 m** taped from the panel front to the wall, a difference of 3 mm. The 0.752 m in that screenshot was measurement Run #38 (Measure tool, two tapped points, +22 mm), not the rule engine.
+- Re-seat on floor pressed on the device: drift went to 0.0 and the button hid. This closes the open 2.5b item.
 - Cosmetic: with Debug on, long scale-readout lines run under the verdict panel. Use Debug off for demos; to be fixed in Phase B.
 
 **Decisions (2026-10-13)**

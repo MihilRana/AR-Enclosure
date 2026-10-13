@@ -53,6 +53,22 @@ namespace ArEnclosure.Core
             Recorded?.Invoke(Last);
         }
 
+        /// <summary>
+        /// A tap resolved against the locked floor's mathematical plane, not a
+        /// plane outline. Logged as a single hit on the locked plane's id, or
+        /// as no hit when refused.
+        /// </summary>
+        public static void RecordFloor(string source, TrackableId floorId, bool hit, Vector3 point, float distance)
+        {
+            var hits = hit
+                ? new[] { new ProbeHit { Id = floorId, Y = point.y, Distance = distance } }
+                : new ProbeHit[0];
+
+            Last = new ProbeRecord { Source = source, Time = UnityEngine.Time.time, Hits = hits, Chosen = hit ? 0 : -1 };
+            HasRecord = true;
+            Recorded?.Invoke(Last);
+        }
+
         public static string ShortId(TrackableId id)
         {
             // Both halves folded together: on ARCore either half alone can

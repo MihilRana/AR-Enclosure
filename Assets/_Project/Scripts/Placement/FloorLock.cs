@@ -12,7 +12,9 @@ namespace ArEnclosure.Placement
         NoHits,
         TooFar,
         NoUsablePlane,
-        OffLockedFloor
+        OffLockedFloor,
+        /// <summary>The ray points at or above the horizon, so it never meets the floor.</summary>
+        AboveHorizon
     }
 
     /// <summary>
@@ -55,12 +57,123 @@ namespace ArEnclosure.Placement
         public bool HasDrifted => HasLock && Mathf.Abs(Drift) > m_HeightTolerance;
         public float HeightTolerance => m_HeightTolerance;
         public float MinimumPlaneArea => m_MinimumPlaneArea;
+        public float SettleRadius => m_SettleRadius;
+
+        /// <summary>
+        /// Before the lock, while a floor is offered. Plane outlines reach past
+        /// walls and are drawn over them (no occlusion), which makes a correct
+        /// floor look wrong, so nothing is drawn while the user checks the
+        /// floor ring instead.
+        /// </summary>
+        public bool HideAllPlanes { get; set; }
 
         readonly List<ARPlane> m_Scratch = new List<ARPlane>();
 
         void Awake()
         {
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
+        }
+
+        /// <summary>
+        /// After the lock: where a screen tap meets the floor, treating the
+        /// floor as an endless flat plane at its current height. Plane outlines
+        /// stop growing once plane finding is off, so the outline cannot be
+        /// used. Refuses rays at or above the horizon (5 degrees margin) and
+        /// hits beyond maxDistance, where a small height error becomes a large
+        /// horizontal one.
+        /// </summary>
+        public bool TryRayFloor(Camera camera, Vector2 screenPoint, float maxDistance,
+            out Vector3 point, out float distance, out HitRejection rejection)
+        {
+            point = default;
+            distance = 0f;
+            rejection = HitRejection.NoHits;
+            if (!HasLock || camera == null) return false;
+
+            var ray = camera.ScreenPointToRay(screenPoint);
+            if (ray.direction.y > -0.087f)
+            {
+                rejection = HitRejection.AboveHorizon;
+                return false;
+            }
+
+            var along = (CurrentHeight - ray.origin.y) / ray.direction.y;
+            if (along <= 0f)
+            {
+                rejection = HitRejection.AboveHorizon;
+                return false;
+            }
+
+            // The screen ray starts at the near clip plane, not the camera, so
+            // measure the distance from the camera itself.
+            point = ray.GetPoint(along);
+            distance = Vector3.Distance(camera.transform.position, point);
+            if (distance > maxDistance)
+            {
+                rejection = HitRejection.TooFar;
+                return false;
+            }
+
+            rejection = HitRejection.None;
+            return true;
+        }
+
+        public struct Conflict
+        {
+            public bool Found;
+            /// <summary>Height of the other plane minus the candidate's, in metres.</summary>
+            public float Gap;
+            public float Area;
+        }
+
+        /// <summary>
+        /// The usable planes near the candidate's outline that sit outside the
+        /// band, nearest in height above and nearest below. Used as a warning
+        /// only: on a reflective floor a mirrored plane can sit below the real
+        /// floor for the whole session and never merge, so this must not block.
+        /// </summary>
+        public void FindConflicts(ARPlane candidate, out Conflict above, out Conflict below)
+        {
+            above = default;
+            below = default;
+            if (candidate == null || m_PlaneManager == null) return;
+
+            var y = candidate.transform.position.y;
+            m_Scratch.Clear();
+            foreach (var plane in m_PlaneManager.trackables) m_Scratch.Add(plane);
+
+            foreach (var other in m_Scratch)
+            {
+                if (other == candidate || !IsUsable(other)) continue;
+                var gap = other.transform.position.y - y;
+                if (Mathf.Abs(gap) <= m_HeightTolerance) continue;
+
+                if (gap > 0f)
+                {
+                    if (above.Found && gap >= above.Gap) continue;
+                    if (!IsNear(candidate, other)) continue;
+                    above = new Conflict { Found = true, Gap = gap, Area = PlaneMetrics.Area(other) };
+                }
+                else
+                {
+                    if (below.Found && gap <= below.Gap) continue;
+                    if (!IsNear(candidate, other)) continue;
+                    below = new Conflict { Found = true, Gap = gap, Area = PlaneMetrics.Area(other) };
+                }
+            }
+        }
+
+        bool IsNear(ARPlane candidate, ARPlane other)
+        {
+            if (PlaneMetrics.HorizontalDistance(candidate, other.center) <= m_SettleRadius) return true;
+            var boundary = other.boundary;
+            if (!boundary.IsCreated) return false;
+            for (var i = 0; i < boundary.Length; i++)
+            {
+                var world = other.transform.TransformPoint(new Vector3(boundary[i].x, 0f, boundary[i].y));
+                if (PlaneMetrics.HorizontalDistance(candidate, world) <= m_SettleRadius) return true;
+            }
+            return false;
         }
 
         void Update()
@@ -93,7 +206,10 @@ namespace ArEnclosure.Placement
             // would only stack the same dots again.
             foreach (var plane in m_PlaneManager.trackables)
             {
-                var visible = HasLock ? plane.trackableId == CurrentId : IsUsable(plane);
+                bool visible;
+                if (HasLock) visible = plane.trackableId == CurrentId;
+                else if (HideAllPlanes) visible = false;
+                else visible = IsUsable(plane);
                 var planeRenderer = plane.GetComponent<Renderer>();
                 if (planeRenderer != null && planeRenderer.enabled != visible) planeRenderer.enabled = visible;
             }
@@ -216,6 +332,7 @@ namespace ArEnclosure.Placement
 
         public void Clear()
         {
+            HideAllPlanes = false;
             HasLock = false;
             LockedId = TrackableId.invalidId;
             CurrentId = TrackableId.invalidId;
