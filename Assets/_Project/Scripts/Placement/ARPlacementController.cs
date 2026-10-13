@@ -52,6 +52,8 @@ namespace ArEnclosure.Placement
         [SerializeField] float m_MaximumPlacementDistance = 3.5f;
         [Tooltip("Optional. Picks usable floor planes, blocks placement while the floor is unsettled, and is locked on placement.")]
         [SerializeField] FloorLock m_FloorLock;
+        [Tooltip("Optional. When set, the user must accept one floor before anything is placed.")]
+        [SerializeField] FloorConfirm m_FloorConfirm;
         [Tooltip("How long a refused-tap message stays on screen.")]
         [SerializeField] float m_NoticeSeconds = 2.5f;
 
@@ -93,6 +95,7 @@ namespace ArEnclosure.Placement
             if (m_RaycastManager == null) m_RaycastManager = FindAnyObjectByType<ARRaycastManager>();
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
             if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
+            if (m_FloorConfirm == null) m_FloorConfirm = FindAnyObjectByType<FloorConfirm>();
 
             //if (m_PlaneManager != null)
             //{
@@ -149,12 +152,25 @@ namespace ArEnclosure.Placement
                 return;
             }
 
+            // Nothing is placed until the user has accepted one floor.
+            if (m_FloorConfirm != null && !m_FloorConfirm.IsConfirmed)
+            {
+                Status = Time.time < m_NoticeUntil ? m_Notice : m_FloorConfirm.Status;
+                if (TryGetTap(out _)) Notice("Confirm the floor first: press Use this floor.");
+                return;
+            }
+
             // A refused tap used to be overwritten on the next frame, so its
             // reason was never readable. Hold it for a moment.
-            Status = Time.time < m_NoticeUntil ? m_Notice : "Ready. Tap a surface.";
+            Status = Time.time < m_NoticeUntil ? m_Notice
+                : m_FloorConfirm != null ? "Floor confirmed. Tap the floor to place."
+                : "Ready. Tap a surface.";
 
             if (TryGetTap(out var screenPoint))
-                TryPlace(screenPoint);
+            {
+                if (m_FloorLock != null && m_FloorLock.HasLock) TryPlaceOnLockedFloor(screenPoint);
+                else TryPlace(screenPoint);
+            }
         }
 
         void UpdateWarmUp()
@@ -267,12 +283,43 @@ namespace ArEnclosure.Placement
                 Notice("Floor still settling (" + (gap * 100f).ToString("F0") + " cm apart), keep scanning.");
                 return;
             }
-            var alignment = plane != null ? plane.alignment : PlaneAlignment.None;
+
+            PlaceAt(hit.pose.position, plane, distance);
+        }
+
+        /// <summary>
+        /// Placement on a confirmed floor. The floor is an endless flat plane
+        /// at its current height, so the tap works anywhere on it, not only
+        /// inside the frozen outline. The settling check already happened at
+        /// confirmation.
+        /// </summary>
+        void TryPlaceOnLockedFloor(Vector2 screenPoint)
+        {
+            var hit = m_FloorLock.TryRayFloor(m_XROrigin.Camera, screenPoint, m_MaximumPlacementDistance,
+                out var point, out var distance, out var rejection);
+            RaycastProbe.RecordFloor("place_floor", m_FloorLock.CurrentId, hit, point, distance);
+
+            if (!hit)
+            {
+                Notice(rejection == HitRejection.TooFar
+                    ? "That spot is " + distance.ToString("F1") + " m away. Step within " + m_MaximumPlacementDistance.ToString("F1") + " m."
+                    : "Tap the floor, below the horizon.");
+                return;
+            }
+
+            PlaceAt(point, m_PlaneManager != null ? m_PlaneManager.GetPlane(m_FloorLock.CurrentId) : null, distance);
+        }
+
+        void PlaceAt(Vector3 position, ARPlane plane, float distance)
+        {
+            var cameraTransform = m_XROrigin.Camera.transform;
+            var alignment = plane != null ? plane.alignment : PlaneAlignment.HorizontalUp;
             var normal = plane != null ? plane.normal : Vector3.up;
+            var hit = new Pose(position, Quaternion.identity);
 
-            var rotation = BuildRotation(alignment, normal, hit.pose.position, cameraTransform.position);
+            var rotation = BuildRotation(alignment, normal, hit.position, cameraTransform.position);
 
-            m_Instance = Instantiate(m_ModelPrefab, hit.pose.position, rotation);
+            m_Instance = Instantiate(m_ModelPrefab, hit.position, rotation);
 
             // Placement never touches scale. If the readout says the size is
             // wrong, the cause is upstream: import settings, prefab root, or
@@ -280,22 +327,24 @@ namespace ArEnclosure.Placement
             m_Instance.transform.localScale = m_ModelPrefab.transform.localScale;
 
             if (m_SeatModelOnSurface)
-                SeatOnSurface(m_Instance, hit.pose.position, alignment, normal);
+                SeatOnSurface(m_Instance, hit.position, alignment, normal);
 
             if (m_AttachAnchor && m_Instance.GetComponent<ARAnchor>() == null)
                 m_Instance.AddComponent<ARAnchor>();
 
             if (m_SpawnMetreReference)
-                SpawnMetreReference(m_Instance, hit.pose.position, rotation);
+                SpawnMetreReference(m_Instance, hit.position, rotation);
 
-            if (m_FloorLock != null) m_FloorLock.Lock(plane, hit.pose.position.y);
+            // With floor confirmation the lock already exists. Without it,
+            // placement sets the lock, as before.
+            if (m_FloorLock != null && !m_FloorLock.HasLock) m_FloorLock.Lock(plane, hit.position.y);
 
             Status = "Placed.";
 
             Placed?.Invoke(new PlacementReport
             {
                 Instance = m_Instance,
-                HitPosition = hit.pose.position,
+                HitPosition = hit.position,
                 DistanceAtPlacement = distance,
                 Alignment = alignment,
                 TrackedPlaneCount = TrackedPlaneCount,
@@ -430,6 +479,7 @@ namespace ArEnclosure.Placement
             m_Instance = null;
             m_Reference = null;
             if (m_FloorLock != null) m_FloorLock.Clear();
+            if (m_FloorConfirm != null) m_FloorConfirm.ResetSearch();
             Status = "Cleared. Tap a surface.";
             Cleared?.Invoke();
         }

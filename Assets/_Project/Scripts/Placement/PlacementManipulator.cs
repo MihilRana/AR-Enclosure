@@ -409,6 +409,17 @@ namespace ArEnclosure.Placement
         bool TryRaycastHorizontal(Vector2 screenPoint, out Vector3 point)
         {
             point = default;
+
+            // Locked floor: an endless flat plane at its current height, so
+            // the drag is not cut off where the frozen outline ends.
+            if (m_FloorLock != null && m_FloorLock.HasLock && m_XROrigin != null)
+            {
+                var onFloor = m_FloorLock.TryRayFloor(m_XROrigin.Camera, screenPoint, m_MaximumDragDistance,
+                    out point, out var distance, out _);
+                RaycastProbe.RecordFloor("drag_floor", m_FloorLock.CurrentId, onFloor, point, distance);
+                return onFloor;
+            }
+
             if (m_RaycastManager == null) return false;
             if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
             {

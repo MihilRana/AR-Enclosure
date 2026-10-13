@@ -3,6 +3,7 @@ using ArEnclosure.App;
 using ArEnclosure.Core;
 using ArEnclosure.Placement;
 using ArEnclosure.Rules;
+using Unity.XR.CoreUtils;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
@@ -24,6 +25,7 @@ namespace ArEnclosure.Obstacles
         [SerializeField] ARRaycastManager m_RaycastManager;
         [SerializeField] FloorLock m_FloorLock;
         [SerializeField] ObstacleSet m_Obstacles;
+        [SerializeField] XROrigin m_XROrigin;
 
         [Header("Marking")]
         [SerializeField] float m_MinimumLength = 0.10f;
@@ -47,6 +49,7 @@ namespace ArEnclosure.Obstacles
             if (m_RaycastManager == null) m_RaycastManager = FindAnyObjectByType<ARRaycastManager>();
             if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
             if (m_Obstacles == null) m_Obstacles = FindAnyObjectByType<ObstacleSet>();
+            if (m_XROrigin == null) m_XROrigin = FindAnyObjectByType<XROrigin>();
         }
 
         void OnEnable()
@@ -96,26 +99,7 @@ namespace ArEnclosure.Obstacles
 
         void HandleTap(Vector2 screenPoint)
         {
-            if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
-            {
-                RaycastProbe.Record("obstacle", m_Hits, -1);
-                Notice("No floor under that tap.");
-                return;
-            }
-
-            var chosen = 0;
-            var rejection = HitRejection.None;
-            if (m_FloorLock != null && !m_FloorLock.TryPickHit(m_Hits, m_MaximumDistance, out chosen, out rejection))
-            {
-                RaycastProbe.Record("obstacle", m_Hits, -1);
-                Notice(rejection == HitRejection.OffLockedFloor ? "Tap the floor, at the base of the wall."
-                    : rejection == HitRejection.TooFar ? "Step within " + m_MaximumDistance.ToString("F1") + " m."
-                    : "Surface not reliable yet (small or merged).");
-                return;
-            }
-            RaycastProbe.Record("obstacle", m_Hits, chosen);
-
-            var point = m_Hits[chosen].pose.position;
+            if (!TryGetFloorPoint(screenPoint, out var point)) return;
 
             if (m_Pending == null)
             {
@@ -134,6 +118,47 @@ namespace ArEnclosure.Obstacles
             m_Obstacles.Add(Kind, m_PendingPoint, point);
             CancelPending();
             Notice(Kind + " marked, " + length.ToString("F2") + " m long.");
+        }
+
+        bool TryGetFloorPoint(Vector2 screenPoint, out Vector3 point)
+        {
+            point = default;
+
+            // Locked floor: an endless flat plane at its current height, so a
+            // wall base can be marked even where the frozen outline stops short.
+            if (m_FloorLock != null && m_FloorLock.HasLock && m_XROrigin != null)
+            {
+                var onFloor = m_FloorLock.TryRayFloor(m_XROrigin.Camera, screenPoint, m_MaximumDistance,
+                    out point, out var distance, out var floorRejection);
+                RaycastProbe.RecordFloor("obstacle_floor", m_FloorLock.CurrentId, onFloor, point, distance);
+                if (!onFloor)
+                    Notice(floorRejection == HitRejection.TooFar
+                        ? "Step within " + m_MaximumDistance.ToString("F1") + " m."
+                        : "Tap the floor, below the horizon.");
+                return onFloor;
+            }
+
+            if (!m_RaycastManager.Raycast(screenPoint, m_Hits, TrackableType.PlaneWithinPolygon))
+            {
+                RaycastProbe.Record("obstacle", m_Hits, -1);
+                Notice("No floor under that tap.");
+                return false;
+            }
+
+            var chosen = 0;
+            var rejection = HitRejection.None;
+            if (m_FloorLock != null && !m_FloorLock.TryPickHit(m_Hits, m_MaximumDistance, out chosen, out rejection))
+            {
+                RaycastProbe.Record("obstacle", m_Hits, -1);
+                Notice(rejection == HitRejection.OffLockedFloor ? "Tap the floor, at the base of the wall."
+                    : rejection == HitRejection.TooFar ? "Step within " + m_MaximumDistance.ToString("F1") + " m."
+                    : "Surface not reliable yet (small or merged).");
+                return false;
+            }
+            RaycastProbe.Record("obstacle", m_Hits, chosen);
+
+            point = m_Hits[chosen].pose.position;
+            return true;
         }
 
         void UpdatePrompt()
