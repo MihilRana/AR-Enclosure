@@ -117,29 +117,34 @@ namespace ArEnclosure.Placement
         }
 
         /// <summary>
-        /// A whole plane, not a tap, is settled when no other usable plane
-        /// near its outline disagrees with its height by more than the band.
-        /// Same rule as the placement-tap check, applied to the plane's edge.
+        /// The usable plane near the candidate's outline whose height differs
+        /// most from it, beyond the band. Signed: negative means below the
+        /// candidate. Used as a warning only. On a reflective floor a mirrored
+        /// plane can sit below the real floor for the whole session and never
+        /// merge, so this must not block confirmation.
         /// </summary>
-        public bool IsPlaneSettled(ARPlane candidate, out float worstGap)
+        public bool TryFindConflict(ARPlane candidate, out float signedGap)
         {
-            worstGap = 0f;
+            signedGap = 0f;
             if (candidate == null || m_PlaneManager == null) return false;
 
             var y = candidate.transform.position.y;
             m_Scratch.Clear();
             foreach (var plane in m_PlaneManager.trackables) m_Scratch.Add(plane);
 
+            var found = false;
             foreach (var other in m_Scratch)
             {
                 if (other == candidate || !IsUsable(other)) continue;
-                var gap = Mathf.Abs(other.transform.position.y - y);
-                if (gap <= m_HeightTolerance) continue;
+                var gap = other.transform.position.y - y;
+                if (Mathf.Abs(gap) <= m_HeightTolerance) continue;
+                if (Mathf.Abs(gap) <= Mathf.Abs(signedGap)) continue;
                 if (!IsNear(candidate, other)) continue;
-                worstGap = Mathf.Max(worstGap, gap);
+                signedGap = gap;
+                found = true;
             }
 
-            return worstGap <= 0f;
+            return found;
         }
 
         bool IsNear(ARPlane candidate, ARPlane other)

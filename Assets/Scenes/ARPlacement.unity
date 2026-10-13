@@ -375,8 +375,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ArEnclosure.Placement.FloorConfirm
   m_PlaneManager: {fileID: 1423645816}
   m_FloorLock: {fileID: 24247458}
-  m_StableSeconds: 1.5
-  m_StableHeight: 0.01
+  m_MinTrackingSeconds: 8
+  m_MinCandidateArea: 1
+  m_HoldSeconds: 2
+  m_LargerFactor: 1.5
   m_OutlineMaterial: {fileID: 2100000, guid: d1e413ec516d7bb4390bebf202e60ba3, type: 2}
   m_OutlineColour: {r: 0.2, g: 0.9, b: 0.35, a: 1}
   m_OutlineWidth: 0.015

@@ -10,23 +10,32 @@ namespace ArEnclosure.Placement
     /// Finds one floor and asks the user to confirm it before anything is
     /// placed.
     ///
-    /// The candidate is the largest usable plane. It is offered once no other
-    /// usable plane near its outline disagrees with its height by more than
-    /// the band, and that has held for a short time. Confirming locks the
-    /// floor and stops plane finding, so ARCore stops spawning new planes; the
-    /// existing ones keep tracking, so drift is still measured. Rescan skips
-    /// the offered plane until ARCore changes it. Reset turns finding back on.
+    /// The candidate is the largest usable plane of at least the minimum
+    /// area, offered after a short tracking warm-up once its own height has
+    /// held steady. Other planes at different heights only produce a warning:
+    /// on a reflective floor a mirrored plane can sit below the real floor for
+    /// the whole session and never merge, so a blocking check would never let
+    /// the user confirm. Once offered, the buttons stay until the candidate
+    /// merges, moves beyond the band, or a much larger plane appears.
+    ///
+    /// Confirming locks the floor and stops plane finding; existing planes
+    /// keep tracking, so drift is still measured. Rescan skips the offered
+    /// plane until ARCore changes it. Reset turns finding back on.
     /// </summary>
     public class FloorConfirm : MonoBehaviour
     {
         [SerializeField] ARPlaneManager m_PlaneManager;
         [SerializeField] FloorLock m_FloorLock;
 
-        [Header("Candidate")]
-        [Tooltip("The candidate must stay settled this long before it is offered.")]
-        [SerializeField] float m_StableSeconds = 1.5f;
-        [Tooltip("A candidate whose height moves more than this restarts the stability timer.")]
-        [SerializeField] float m_StableHeight = 0.01f;
+        [Header("Offer rules")]
+        [Tooltip("No floor is offered before this much continuous tracking.")]
+        [SerializeField] float m_MinTrackingSeconds = 8f;
+        [Tooltip("Smaller planes are never offered as the floor.")]
+        [SerializeField] float m_MinCandidateArea = 1.0f;
+        [Tooltip("The candidate's own height must stay within the band this long.")]
+        [SerializeField] float m_HoldSeconds = 2f;
+        [Tooltip("Once offered, a plane this many times larger replaces the offer.")]
+        [SerializeField] float m_LargerFactor = 1.5f;
 
         [Header("Outline")]
         [SerializeField] Material m_OutlineMaterial;
@@ -42,16 +51,20 @@ namespace ArEnclosure.Placement
         static readonly int k_BaseColor = Shader.PropertyToID("_BaseColor");
 
         public bool IsConfirmed => m_FloorLock != null && m_FloorLock.HasLock;
-        /// <summary>A settled floor is waiting for Use this floor or Rescan.</summary>
+        /// <summary>A floor is waiting for Use this floor or Rescan.</summary>
         public bool HasOffer { get; private set; }
         public bool PlaneFindingOn => m_PlaneManager != null && m_PlaneManager.requestedDetectionMode != PlaneDetectionMode.None;
         public string Status { get; private set; } = "Scanning for the floor.";
+        /// <summary>Advice about other surfaces near the offered floor, or empty.</summary>
+        public string Warning { get; private set; } = string.Empty;
 
         readonly List<Rejected> m_Rejected = new List<Rejected>();
         PlaneDetectionMode m_SearchMode = PlaneDetectionMode.Horizontal;
         ARPlane m_Candidate;
-        float m_CandidateSince;
-        float m_CandidateHeight;
+        float m_HeldSince;
+        float m_ReferenceHeight;
+        float m_OfferedHeight;
+        float m_TrackingSince = -1f;
         LineRenderer m_Outline;
         MaterialPropertyBlock m_Block;
 
@@ -70,15 +83,35 @@ namespace ArEnclosure.Placement
         {
             if (m_PlaneManager == null || m_FloorLock == null) return;
 
+            if (ARSession.state == ARSessionState.SessionTracking)
+            {
+                if (m_TrackingSince < 0f) m_TrackingSince = Time.time;
+            }
+            else
+            {
+                m_TrackingSince = -1f;
+            }
+
             if (IsConfirmed)
             {
                 HasOffer = false;
+                Warning = string.Empty;
                 SetOutline(null);
                 return;
             }
 
             ForgetChangedRejections();
-            UpdateCandidate();
+
+            if (HasOffer) KeepOrReplaceOffer();
+            else SearchForOffer();
+
+            if (HasOffer)
+            {
+                UpdateWarning();
+                SetOutline(m_Candidate);
+                Status = "Floor found (" + PlaneMetrics.Area(m_Candidate).ToString("F1") + " m2). Use this floor?" +
+                         (Warning.Length > 0 ? "\n" + Warning : "");
+            }
         }
 
         /// <summary>Lock the offered floor and stop ARCore finding more planes.</summary>
@@ -92,6 +125,7 @@ namespace ArEnclosure.Placement
 
             HasOffer = false;
             m_Candidate = null;
+            Warning = string.Empty;
             SetOutline(null);
             Status = "Floor confirmed. Tap the floor to place.";
         }
@@ -105,7 +139,7 @@ namespace ArEnclosure.Placement
             if (m_Candidate != null)
                 m_Rejected.Add(new Rejected { Id = m_Candidate.trackableId, Height = m_Candidate.transform.position.y });
 
-            ClearCandidate();
+            Withdraw();
             Status = "Rescanning. Keep moving the phone over the floor.";
         }
 
@@ -113,9 +147,95 @@ namespace ArEnclosure.Placement
         public void ResetSearch()
         {
             m_Rejected.Clear();
-            ClearCandidate();
+            Withdraw();
             if (m_PlaneManager != null) m_PlaneManager.requestedDetectionMode = m_SearchMode;
             Status = "Scanning for the floor.";
+        }
+
+        /// <summary>
+        /// While an offer stands it only changes for a real reason, so the
+        /// buttons do not flicker as other planes come and go.
+        /// </summary>
+        void KeepOrReplaceOffer()
+        {
+            var gone = m_Candidate == null || m_PlaneManager.GetPlane(m_Candidate.trackableId) == null ||
+                       m_Candidate.subsumedBy != null;
+            var moved = !gone && Mathf.Abs(m_Candidate.transform.position.y - m_OfferedHeight) > m_FloorLock.HeightTolerance;
+            var larger = !gone && FindLargest(out var largest) && largest != m_Candidate &&
+                         PlaneMetrics.Area(largest) >= m_LargerFactor * PlaneMetrics.Area(m_Candidate);
+
+            if (!gone && !moved && !larger) return;
+
+            // Start again: the new or moved plane must hold its height first.
+            Withdraw();
+            SearchForOffer();
+        }
+
+        void SearchForOffer()
+        {
+            var tracked = m_TrackingSince < 0f ? 0f : Time.time - m_TrackingSince;
+            if (tracked < m_MinTrackingSeconds)
+            {
+                Status = "Scanning for the floor (" + (m_MinTrackingSeconds - tracked).ToString("F0") + " s).";
+                return;
+            }
+
+            if (!FindLargest(out var best) || PlaneMetrics.Area(best) < m_MinCandidateArea)
+            {
+                m_Candidate = null;
+                Status = m_Rejected.Count > 0
+                    ? "Rescanning. Keep moving the phone over the floor."
+                    : "Scanning for the floor. Sweep the phone slowly over open floor.";
+                return;
+            }
+
+            var y = best.transform.position.y;
+            if (best != m_Candidate || Mathf.Abs(y - m_ReferenceHeight) > m_FloorLock.HeightTolerance)
+            {
+                // New plane, or its own height moved: start the hold again.
+                m_Candidate = best;
+                m_ReferenceHeight = y;
+                m_HeldSince = Time.time;
+            }
+
+            if (Time.time - m_HeldSince < m_HoldSeconds)
+            {
+                Status = "Checking the floor.";
+                return;
+            }
+
+            HasOffer = true;
+            m_OfferedHeight = y;
+            m_FloorLock.HighlightId = best.trackableId;
+        }
+
+        void UpdateWarning()
+        {
+            if (!m_FloorLock.TryFindConflict(m_Candidate, out var gap))
+            {
+                Warning = string.Empty;
+                return;
+            }
+
+            var cm = Mathf.Abs(gap * 100f).ToString("F0");
+            Warning = gap < 0f
+                ? "Another surface " + cm + " cm below (likely reflection)."
+                : "Another surface " + cm + " cm above (table, step or false floor?).";
+        }
+
+        bool FindLargest(out ARPlane largest)
+        {
+            largest = null;
+            var bestArea = 0f;
+            foreach (var plane in m_PlaneManager.trackables)
+            {
+                if (!m_FloorLock.IsUsable(plane) || IsRejected(plane.trackableId)) continue;
+                var area = PlaneMetrics.Area(plane);
+                if (area <= bestArea) continue;
+                largest = plane;
+                bestArea = area;
+            }
+            return largest != null;
         }
 
         void ForgetChangedRejections()
@@ -137,67 +257,13 @@ namespace ArEnclosure.Placement
             return false;
         }
 
-        void UpdateCandidate()
+        void Withdraw()
         {
-            ARPlane best = null;
-            var bestArea = 0f;
-            foreach (var plane in m_PlaneManager.trackables)
-            {
-                if (!m_FloorLock.IsUsable(plane) || IsRejected(plane.trackableId)) continue;
-                var area = PlaneMetrics.Area(plane);
-                if (area <= bestArea) continue;
-                best = plane;
-                bestArea = area;
-            }
-
-            if (best == null)
-            {
-                ClearCandidate();
-                Status = m_Rejected.Count > 0
-                    ? "Rescanning. Keep moving the phone over the floor."
-                    : "Scanning for the floor.";
-                return;
-            }
-
-            var y = best.transform.position.y;
-            if (best != m_Candidate || Mathf.Abs(y - m_CandidateHeight) > m_StableHeight)
-            {
-                // New plane, or the same plane moving: start the clock again.
-                m_Candidate = best;
-                m_CandidateSince = Time.time;
-                m_CandidateHeight = y;
-            }
-
-            if (!m_FloorLock.IsPlaneSettled(best, out var gap))
-            {
-                m_CandidateSince = Time.time;
-                SetOffer(false);
-                Status = "Floor still settling (" + (gap * 100f).ToString("F0") + " cm apart), keep scanning.";
-                return;
-            }
-
-            if (Time.time - m_CandidateSince < m_StableSeconds)
-            {
-                SetOffer(false);
-                Status = "Checking the floor.";
-                return;
-            }
-
-            SetOffer(true);
-            Status = "Floor found (" + bestArea.ToString("F1") + " m2). Use this floor?";
-        }
-
-        void SetOffer(bool offer)
-        {
-            HasOffer = offer;
-            m_FloorLock.HighlightId = offer && m_Candidate != null ? m_Candidate.trackableId : TrackableId.invalidId;
-            SetOutline(offer ? m_Candidate : null);
-        }
-
-        void ClearCandidate()
-        {
+            HasOffer = false;
             m_Candidate = null;
-            SetOffer(false);
+            Warning = string.Empty;
+            m_FloorLock.HighlightId = TrackableId.invalidId;
+            SetOutline(null);
         }
 
         void SetOutline(ARPlane plane)
