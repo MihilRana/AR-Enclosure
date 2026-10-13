@@ -20,7 +20,23 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - Conflicting planes become a warning under the offer: "Another surface N cm below (likely reflection)." or "Another surface N cm above (table, step or false floor?)." The user still decides.
 - Rescan rule unchanged: the plane is skipped until it merges, disappears, or moves more than 3 cm.
 - The settings have new field names (`m_MinTrackingSeconds` 8, `m_MinCandidateArea` 1.0, `m_HoldSeconds` 2, `m_LargerFactor` 1.5). The old serialized values could not override them, and the scene was checked to hold the new values.
-- `FloorLock.IsPlaneSettled` was replaced by `FloorLock.TryFindConflict`, which returns the signed height gap of the most different nearby usable plane.
+- `FloorLock.IsPlaneSettled` was replaced by a conflict finder (see below).
+
+**Device test 2 (2026-10-13), advising gate:** the offer came after about 8 s on the big floor. The buttons stayed while sweeping. Rescan worked. After confirming, the plane count stopped growing, taps worked outside the outline, taps on the sky were refused, and Reset worked.
+
+- Problem: the outline appeared on the wrong surface many times.
+  - In shot 19, the offered plane `3e57` was at floor height, but its outline and dots ran over the wall, curtain and table, because ARCore's outline reaches past walls and nothing hides it behind them. Once confirmed, the panel sat correctly.
+  - In session 2, two large planes 37 cm apart overlapped (`0797` 24 m² and `c8d7` 11 m²). The rule picked `0797`, and the panel looked seated on the tiles, so `c8d7` was the reflection.
+  - The warning showed only the biggest gap, so `c8d7` (34 cm below) was hidden behind `7370` (37 cm above).
+- Conclusion: the outline is the wrong tool for judging the floor height. Which plane is chosen is unchanged, because the largest plane was correct in both sessions.
+
+**Change: floor ring (the last floor change before Phase B)**
+
+- While a floor is offered, no plane outline or dots are drawn (`FloorLock.HideAllPlanes`).
+- Instead, a green ring (0.4 m across, with a small centre cross) is drawn at the candidate's height, where the centre of the screen meets it, within 4 m. The prompt reads "Point at open floor. The ring must stay on one tile as you move the phone." At the right height the ring stays on one tile as the phone moves; at a wrong height it slides across the tiles.
+- The warning now lists the nearest conflicting surface above and the nearest below, each with its area, for example "Surface 37 cm above (2.8 m2, table, step or false floor?)." and "Surface 34 cm below (10.9 m2, likely reflection).".
+- `FloorLock.FindConflicts` returns the nearest-above and nearest-below usable planes near the candidate, beyond the ±3 cm band.
+- The outline settings were renamed to ring settings with `FormerlySerializedAs`, so the scene kept its material and colour. The scene was checked.
 
 **Why:** ARCore keeps creating, merging and moving planes for the whole session. Each new plane is another chance for a false floor, and the floor in session 2 moved 10 cm. Once the user has accepted a floor, there is nothing more to find.
 
@@ -61,7 +77,8 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 **How to test**
 
-1. Start the app and scan the floor. For the first 8 s it should read "Scanning for the floor (N s)". Then "Checking the floor", then "Floor found (N m2). Use this floor?", plus a warning line if another surface is nearby. One plane (at least 1 m²) should be drawn with a green outline, and the buttons should appear and stay while other planes appear.
+1. Start the app and scan the floor. For the first 8 s it should read "Scanning for the floor (N s)", then "Checking the floor", then "Floor found (N m2)" with the ring prompt and up to two warning lines (above and below). No planes should be drawn while the floor is offered. A green ring with a cross should follow the centre of the screen on the floor, and the buttons should stay while other planes appear.
+1b. Ring check: aim the cross at a grout corner and move the phone sideways about 30 cm, keeping the cross roughly there. On the real floor the ring stays on that tile. Press Rescan if it slides.
 2. Tap the floor before confirming. It should say "Confirm the floor first" and place nothing.
 3. Press Rescan. The outline should go. The same plane should only come back after it changes, while another floor can be offered meanwhile.
 4. Press Use this floor. The outline should go, the debug readout should show PLANE FINDING off, and the PLANES count should stop going up while you walk around.
