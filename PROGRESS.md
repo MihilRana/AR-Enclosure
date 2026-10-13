@@ -2,6 +2,64 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 3.2b Confirm the floor, then stop plane finding
+
+**Status:** built, compiled clean, floor-ray maths checked in the Editor. Waiting for the device test. The demo uses the `task-3.4a` build, which this task does not change.
+
+**Why:** ARCore keeps creating, merging and moving planes for the whole session. Each new plane is another chance for a false floor, and the floor in session 2 moved 10 cm. Once the user has accepted a floor, there is nothing more to find.
+
+**What was built**
+
+- New `Placement/FloorConfirm.cs`:
+  - The candidate is the largest usable plane (unmerged, fully tracked, horizontal, at least 0.25 m²).
+  - It is offered when no other usable plane near its outline (within 1.0 m) differs in height by more than 3 cm, and that has held for 1.5 s. Its height must stay within 1 cm during that time.
+  - While offered, only that plane is drawn, with a green outline. In Move mode two buttons appear: "Use this floor" and "Rescan".
+  - **Use this floor:** locks the floor on that plane and sets `ARPlaneManager.requestedDetectionMode = None`. Existing planes keep tracking, so drift is still measured. Only the locked floor is drawn.
+  - **Rescan:** skips the offered plane until ARCore changes it, that is until it merges into another plane, disappears, or its height moves more than 3 cm. It can then be offered again. Other planes can be offered in the meantime.
+  - **Reset:** restores the detection mode set in the inspector (Horizontal), clears the skip list and the candidate, and starts searching again.
+- `FloorLock.TryRayFloor`:
+  - After the lock, a tap meets an endless flat plane at the floor's current height, so it works anywhere on the floor.
+  - Rays less than about 5° below the horizon are refused, and so are hits beyond the distance limit. The distance is measured from the camera, not from the near clip plane.
+  - `FloorLock.IsPlaneSettled` applies the ±3 cm and 1 m rules to a whole plane.
+- Using the flat floor plane after the lock:
+  - placement (3.5 m limit);
+  - drag (6 m, unchanged);
+  - measurement (3.5 m; these runs are tagged `LockedFloor` in the `tracking_state` column of measurements.csv);
+  - obstacle marking (3.5 m).
+
+  Before the lock, all of them work exactly as before.
+- Placement: until a floor is confirmed, a tap shows "Confirm the floor first". The warm-up gate still applies.
+- The clearance panel shows the placement status before placement, so the floor prompts can be read with Debug off.
+- Diagnostics: a "PLANE FINDING" line in the readout. Taps on the flat floor plane are logged as `place_floor`, `drag_floor`, `measure_floor` and `obstacle_floor`, with the locked plane's id.
+- Unchanged: drift readout, Re-seat, the ±3 cm band, the rule engine, obstacle storage, and all CSV layouts.
+
+**Editor check:** with a floor at y = -1.2 m and the camera at the origin:
+
+| Camera pitch | Result |
+|---|---|
+| 45° down | hit at (0, -1.2, 1.2), 1.697 m away |
+| 10° down | 6.91 m, refused as too far |
+| 20° up | refused as above the horizon |
+
+**Files touched:** `Placement/FloorConfirm.cs` (new), `Placement/FloorLock.cs`, `Placement/ARPlacementController.cs`, `Placement/PlacementManipulator.cs`, `Measurement/MeasurementTool.cs`, `Obstacles/ObstacleTool.cs`, `UI/PlacementHUD.cs`, `UI/ClearanceHUD.cs`, `Diagnostics/PlaneDiagnostics.cs`, `Core/RaycastProbe.cs`, `Scenes/ARPlacement.unity` (FloorConfirm on `/Controllers`, plus `UseFloorButton` and `RescanButton`).
+
+**How to test**
+
+1. Start the app and scan the floor. The clearance panel status should go from "Scanning for the floor" to "Checking the floor" to "Floor found (N m2). Use this floor?". One plane should be drawn with a green outline, and the Use this floor and Rescan buttons should appear.
+2. Tap the floor before confirming. It should say "Confirm the floor first" and place nothing.
+3. Press Rescan. The outline should go. The same plane should only come back after it changes, while another floor can be offered meanwhile.
+4. Press Use this floor. The outline should go, the debug readout should show PLANE FINDING off, and the PLANES count should stop going up while you walk around.
+5. Place the panel well outside the old plane outline. It should work up to 3.5 m. Drag it across the whole floor; it should not stop at outline edges. Measure and mark obstacles away from the drawn plane.
+6. Tap a wall above the floor line, or the sky through a window. It should say "Tap the floor, below the horizon".
+7. Re-seat and drift should work as before.
+8. Press Reset. Plane finding should come back on, planes should be drawn, and the search should start again.
+9. Tape-check one front_gangway reading against a measurement taken away from the original plane outline.
+
+**Known issues**
+
+- A tap on a wall in the camera image meets the floor plane behind the wall. For obstacle marking, tap where the wall meets the floor.
+- With plane finding off, ARCore no longer refines the floor outline. Only the floor's height is used after confirming, so this does not matter.
+
 ## 3.2 to 3.4 Obstacles and rule engine, Phase A (demo)
 
 **Status:** device test passed on the Pixel 9a on 2026-10-13.
@@ -17,7 +75,8 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - Check 13 was INCOMPLETE with 2 obstacles: after a drag, no wall was in the strip in front of the door side. This is correct.
 - The Re-seat button appeared on the device (drift -3.8 cm in session 1, +10.0 to +11.3 cm in session 2), so its show and hide logic is verified. Pressing it is still to be confirmed.
 - Session 2 floor move: the locked plane 4011 (y -1.020) was merged by ARCore into 3270, 10 cm higher. This is the third time ARCore has settled on the upper estimate. The gaps are horizontal, so the verdicts are unaffected by the height change, but the panel looked sunk until re-seated.
-- Not yet done: a tape comparison of front_gangway against a real floor measurement.
+- Tape comparison (2026-10-13, 17:49): front_gangway read **0.727 m** (rule_checks.csv, 17:49:25) against **0.73 m** taped from the panel front to the wall, a difference of 3 mm. The 0.752 m in that screenshot was measurement Run #38 (Measure tool, two tapped points, +22 mm), not the rule engine.
+- Re-seat on floor pressed on the device: drift went to 0.0 and the button hid. This closes the open 2.5b item.
 - Cosmetic: with Debug on, long scale-readout lines run under the verdict panel. Use Debug off for demos; to be fixed in Phase B.
 
 **Decisions (2026-10-13)**

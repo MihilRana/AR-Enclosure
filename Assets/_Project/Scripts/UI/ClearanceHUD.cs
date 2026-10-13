@@ -2,6 +2,7 @@ using System.Text;
 using ArEnclosure.App;
 using ArEnclosure.Diagnostics;
 using ArEnclosure.Obstacles;
+using ArEnclosure.Placement;
 using ArEnclosure.Rules;
 using TMPro;
 using UnityEngine;
@@ -21,6 +22,7 @@ namespace ArEnclosure.UI
         [SerializeField] ClearanceChecker m_Checker;
         [SerializeField] ObstacleTool m_Tool;
         [SerializeField] ObstacleSet m_Obstacles;
+        [SerializeField] ARPlacementController m_Placement;
 
         [Header("Readout")]
         [Tooltip("Panel (with background) that holds the readout. Hidden in Measure mode.")]
@@ -48,6 +50,7 @@ namespace ArEnclosure.UI
             if (m_Checker == null) m_Checker = FindAnyObjectByType<ClearanceChecker>();
             if (m_Tool == null) m_Tool = FindAnyObjectByType<ObstacleTool>();
             if (m_Obstacles == null) m_Obstacles = FindAnyObjectByType<ObstacleSet>();
+            if (m_Placement == null) m_Placement = FindAnyObjectByType<ARPlacementController>();
             if (m_PlaneDiagnostics == null) m_PlaneDiagnostics = FindAnyObjectByType<PlaneDiagnostics>();
         }
 
@@ -116,7 +119,11 @@ namespace ArEnclosure.UI
             if (c.Verdict == Verdict.NotPlaced)
             {
                 m_Builder.AppendLine("<b>CLEARANCE CHECK</b>");
-                m_Builder.AppendLine("Place the enclosure to check.");
+                // The placement status carries the floor-confirm prompts, which
+                // must be readable with the debug readouts hidden.
+                m_Builder.AppendLine(m_Placement != null && !string.IsNullOrEmpty(m_Placement.Status)
+                    ? m_Placement.Status
+                    : "Place the enclosure to check.");
                 return m_Builder.ToString();
             }
 

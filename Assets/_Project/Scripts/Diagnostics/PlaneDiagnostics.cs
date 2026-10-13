@@ -126,7 +126,7 @@ namespace ArEnclosure.Diagnostics
 
             // Drag raycasts every frame. Only log when the winning plane or
             // the hit count changes, which is exactly when a jump happens.
-            if (r.Source == "drag")
+            if (r.Source.StartsWith("drag"))
             {
                 var choice = r.Chosen >= 0 ? r.Hits[r.Chosen].Id : TrackableId.invalidId;
                 if (choice == m_LastDragChoice && r.Hits.Length == m_LastDragHitCount) return;
@@ -252,6 +252,8 @@ namespace ArEnclosure.Diagnostics
         {
             m_Builder.AppendLine();
             if (m_FloorLock == null) return;
+            if (m_PlaneManager != null)
+                m_Builder.Append("PLANE FINDING  ").AppendLine(m_PlaneManager.requestedDetectionMode == PlaneDetectionMode.None ? "off (floor confirmed)" : m_PlaneManager.requestedDetectionMode.ToString());
             if (!m_FloorLock.HasLock)
             {
                 m_Builder.AppendLine("LOCK  none, set on placement");
