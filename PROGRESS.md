@@ -2,6 +2,88 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 3.2 to 3.4 Obstacles and rule engine, Phase A (demo)
+
+**Status:** built, compiled clean, engine tested in the Editor, Play mode test passed. Waiting for the device test.
+
+**Decisions (2026-10-13)**
+
+- Vertical plane detection stays off. Obstacles are lines marked on the locked floor along the base of a wall or of a facing enclosure. Google publishes no CPU figure for vertical mode, and plain walls detect poorly.
+- Verdict: NOT COMPLIANT if any applicable required rule fails. Otherwise INCOMPLETE if any required standard or model rule is unknown or not set. Otherwise "COMPLIANT (IEC 60364-7-729 checks)".
+  - `user_input` rules left null are skipped and reported as "N manufacturer gaps not entered", so the verdict never overclaims.
+  - Advisory rules only warn.
+- Front = the door side = local +Z of the enclosure model. This is read from `model_profile.json`.
+- Handle and enclosure gaps are both measured from the model's front envelope. This is a limitation recorded in the IEC notes.
+- Door leaf width comes only from the explicit `Door` group: 0.587 m (`Door_1`). The `DOL_*` parts are not counted until they are confirmed.
+
+**What was built**
+
+- `Assets/StreamingAssets/rules.json`: the final rules file, copied unchanged. No clearance value exists in code.
+- `Assets/StreamingAssets/model_profile.json`: model id, front axis, door group name, and the minimum width for a part to count as a door leaf (0.2 m, which excludes hinges and locks).
+- `Rules/RuleData.cs`: data classes matching the two JSON files. `min_m` can be null.
+- `Rules/ClearanceGeometry.cs`:
+  - computes the gap from a face of the panel's oriented box to obstacle lines;
+  - each face looks only along the strip of floor straight out from it, as wide as the face, so a wall off to one side does not count;
+  - the nearest point of the clipped line gives the gap;
+  - also works out the widest door leaf from the door group.
+- `Rules/RuleEngine.cs`:
+  - the value comes from `value_source` (standard, model door geometry, user input);
+  - `min_m` null gives "not set";
+  - `applies_if` conditions are all off by default, giving "n/a", and an unknown condition key is never treated as met;
+  - `level` decides fail or warn;
+  - `door_edge_open_90` subtracts the leaf width from the gap;
+  - results are compared in whole millimetres.
+- `Rules/ClearanceChecker.cs`:
+  - loads both JSON files with `UnityWebRequest` (needed on Android) and Newtonsoft JSON;
+  - evaluates every frame while the panel is placed and draws a gap line from each face to its nearest obstacle (green pass, red fail, amber warn, white otherwise);
+  - logs to `rule_checks.csv` whenever the outcome changes and no gesture is in progress;
+  - if a file fails to load, the HUD shows RULES NOT LOADED and the reason.
+- `Obstacles/ObstacleSet.cs`: stores obstacle lines as frozen world points. Each is drawn as a floor line plus a 1 m translucent fence (orange for a wall, blue for an enclosure). Changes are logged to `obstacles.csv`.
+- `Obstacles/ObstacleTool.cs`: Obstacle mode. Tap two floor points to make a line, minimum 0.10 m. Uses the floor lock, with a 3.5 m maximum. Undo removes a pending point first, then the last line.
+- `UI/ClearanceHUD.cs`:
+  - the verdict panel at top right, with the verdict, gaps not entered, warnings, obstacle count, door leaf, and each rule's measured value against its required value;
+  - Obstacle-mode buttons: Kind (wall or enclosure), Undo, Clear obstacles;
+  - a Debug toggle that hides the scale and plane readouts for a cleaner demo.
+- The Mode button now cycles Move, Measure, Obstacle. The measurement result shows only in Measure mode, and the clearance panel shows in the other two modes.
+- `Core/CsvLog.cs`: a shared CSV writer with a fixed header. If a file has an old header, it is renamed aside.
+- `link.xml` keeps the rule data classes and Newtonsoft for IL2CPP. Newtonsoft 3.2.2 is now a direct dependency in `manifest.json`; it was already installed through another package.
+- New material `ObstacleFence.mat`: a transparent URP Unlit asset, referenced by the scene.
+
+**Editor test of the engine** (real rules.json and model, synthetic obstacles):
+
+| Case | Result |
+|---|---|
+| No obstacles | INCOMPLETE (3 required unknown, 3 manufacturer gaps not entered) |
+| Wall 0.750 m in front | COMPLIANT |
+| Wall 0.650 m | NOT COMPLIANT: gangway fails, handle (0.600) passes, door swing (0.587) passes |
+| Wall 0.550 m | all three front rules fail |
+| Wall 0.30 m ahead but off to one side | ignored (unknown) |
+| Slanted wall | its nearest end (0.720) decides |
+| Panel turned 90° | 0.800 measured correctly |
+| Conditions switched on | door_fixed_open_passing = 0.800 - 0.587 = 0.213, so it fails |
+
+In Play mode, the rules loaded through `UnityWebRequest`. With a panel and a wall 0.650 m away injected, the HUD read NOT COMPLIANT and `rule_checks.csv` had one row per rule.
+
+**How to test on the phone**
+
+1. Place the panel in Move mode. The panel at top right should show INCOMPLETE, "3 manufacturer gaps not entered", "Door leaf 0.587 m", and the three front rules as unknown.
+2. Tap Mode twice to reach "Mode: Obstacle". The prompt should read "Tap the floor at the base of a wall".
+3. Tap the floor where a wall meets it, then tap again about 1 m along the wall. An orange line and fence should appear on the wall.
+4. If the wall is in front of the panel's door side, a gap line should appear. The front rules should show measured values, and the verdict should update.
+5. Tape-check: measure from the panel's front (door side) to the wall on the floor with a tape, and compare it with front_gangway's measured value.
+6. Go back to Move mode and drag the panel closer to the wall than 0.700 m. front_gangway should go red (FAIL) and the verdict should read NOT COMPLIANT. Drag it below 0.600 m and front_handle_clearance should fail too.
+7. Drag it back beyond 0.700 m. The verdict should read COMPLIANT (IEC 60364-7-729 checks), with "3 manufacturer gaps not entered".
+8. Tap Kind to switch to Enclosure and mark a facing enclosure. It should be blue and count for the front rules.
+9. Test Undo (a half-marked point first, then the last line) and Clear obstacles.
+10. Debug: off should hide the scale and plane readouts.
+11. Pull the logs: `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/rule_checks.csv` and `obstacles.csv`.
+
+**Known issues and limits**
+
+- No vertical planes: obstacles are marked on the floor only. A ceiling (`vent_gap_top`) cannot be measured. That rule is skipped while it has no value.
+- Reset clears the panel but keeps the obstacles, because they belong to the room. Use Clear obstacles to remove them.
+- Phase B is not built yet: the toggle UI for `applies_if` conditions, entry fields for the vent gaps, confirming the `DOL_*` parts, and the 3.5 clearance zones.
+
 ## 2.5b Floor lock (false upper planes)
 
 **Problem seen on the device:** ARCore sometimes makes a horizontal plane above the real floor, or several overlapping planes for one floor. Drag and measurement taps then hit the upper plane, and the panel jumps up onto it. Plane outlines also show wrong corners and overlap each other.

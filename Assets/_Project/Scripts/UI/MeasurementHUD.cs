@@ -55,8 +55,10 @@ namespace ArEnclosure.UI
 
         void OnModePressed()
         {
-            // Obstacle mode joins this cycle in 3.3.
-            var next = m_Modes.Current == AppMode.Measure ? AppMode.Move : AppMode.Measure;
+            // Move -> Measure -> Obstacle -> Move.
+            var next = m_Modes.Current == AppMode.Move ? AppMode.Measure
+                : m_Modes.Current == AppMode.Measure ? AppMode.Obstacle
+                : AppMode.Move;
             m_Modes.RequestMode(next);
         }
 
@@ -78,6 +80,10 @@ namespace ArEnclosure.UI
             if (m_KindLabel != null) m_KindLabel.text = m_Tool.Kind.ToString();
 
             if (m_Result == null) return;
+
+            // The clearance panel uses the same corner outside Measure mode.
+            if (m_Result.gameObject.activeSelf != measuring) m_Result.gameObject.SetActive(measuring);
+            if (!measuring) return;
 
             m_Builder.Clear();
 
