@@ -1,0 +1,8 @@
+<linker>
+  <!-- Rules and model profile are read with Newtonsoft JSON by reflection.
+       IL2CPP strips members it cannot see being used, so keep them. -->
+  <assembly fullname="Assembly-CSharp">
+    <namespace fullname="ArEnclosure.Rules" preserve="all" />
+  </assembly>
+  <assembly fullname="Newtonsoft.Json" preserve="all" />
+</linker>
