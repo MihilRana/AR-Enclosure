@@ -50,6 +50,13 @@ namespace ArEnclosure.Diagnostics
             SetAsideIfHeaderChanged();
         }
 
+        /// <summary>Lets the HUD's Debug toggle hide the readout. Logging carries on.</summary>
+        public bool ShowReadout
+        {
+            get => m_ShowReadout;
+            set => m_ShowReadout = value;
+        }
+
         void OnEnable() => RaycastProbe.Recorded += OnRecorded;
         void OnDisable() => RaycastProbe.Recorded -= OnRecorded;
 
