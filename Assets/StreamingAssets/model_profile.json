@@ -1,0 +1,9 @@
+{
+  "model_id": "Panel_126062",
+  "description": "Test enclosure, 1.649 x 0.450 x 1.925 m",
+  "front_axis": "+Z",
+  "front_axis_note": "Door side. Door parts sit at local z = +0.038, the front of the model bounds.",
+  "door_group": "Door",
+  "door_leaf_min_width_m": 0.200,
+  "door_note": "Door leaves are mesh parts under the transform named door_group that are at least door_leaf_min_width_m wide along the front face. Smaller parts in that group (hinges, locks) are ignored. The DOL_* front parts are not counted until confirmed as door leaves."
+}
