@@ -4,7 +4,23 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 3.2b Confirm the floor, then stop plane finding
 
-**Status:** built, compiled clean, floor-ray maths checked in the Editor. Waiting for the device test. The demo uses the `task-3.4a` build, which this task does not change.
+**Status:** first device test failed on the reflective tile floor. The settling gate was changed from blocking to advising (below). Built and compiled clean, waiting for the device re-test. The demo fallback is `demo_3.4a.apk`.
+
+**Device test 1 (2026-10-13), confirm flow failed**
+
+- At 6.8 s, plane 2d30 (2.6 m²) was offered too early. It later turned out to sit 21 cm below the main floor, most likely a reflection.
+- At 13.5 s, plane 5c33 appeared 21 cm away. The gate withdrew the offer and the buttons vanished.
+- At 78.5 s there were 9 planes spread over 55 cm. Plane 1377 (16 m²) was the real floor. Plane a011 sat 55 cm below it, a reflection that never merges, so the gate could never settle and the buttons never came back.
+- Conclusion: on a glossy floor, a "no conflicting planes" rule can never be met. Conflicts must be advice, not a block.
+
+**Change: advising gate**
+
+- Candidate: the largest usable plane, not skipped by Rescan. It is offered only after 8 s of tracking, if its area is at least 1.0 m², and once its own height has stayed within ±3 cm for 2 s.
+- Once offered, the buttons stay. The offer is replaced only if the candidate merges or disappears, its height moves more than 3 cm, or a usable plane at least 1.5× its area appears. Any replacement goes through the 2 s hold again. Other planes appearing do not hide the buttons.
+- Conflicting planes become a warning under the offer: "Another surface N cm below (likely reflection)." or "Another surface N cm above (table, step or false floor?)." The user still decides.
+- Rescan rule unchanged: the plane is skipped until it merges, disappears, or moves more than 3 cm.
+- The settings have new field names (`m_MinTrackingSeconds` 8, `m_MinCandidateArea` 1.0, `m_HoldSeconds` 2, `m_LargerFactor` 1.5). The old serialized values could not override them, and the scene was checked to hold the new values.
+- `FloorLock.IsPlaneSettled` was replaced by `FloorLock.TryFindConflict`, which returns the signed height gap of the most different nearby usable plane.
 
 **Why:** ARCore keeps creating, merging and moving planes for the whole session. Each new plane is another chance for a false floor, and the floor in session 2 moved 10 cm. Once the user has accepted a floor, there is nothing more to find.
 
@@ -45,7 +61,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 **How to test**
 
-1. Start the app and scan the floor. The clearance panel status should go from "Scanning for the floor" to "Checking the floor" to "Floor found (N m2). Use this floor?". One plane should be drawn with a green outline, and the Use this floor and Rescan buttons should appear.
+1. Start the app and scan the floor. For the first 8 s it should read "Scanning for the floor (N s)". Then "Checking the floor", then "Floor found (N m2). Use this floor?", plus a warning line if another surface is nearby. One plane (at least 1 m²) should be drawn with a green outline, and the buttons should appear and stay while other planes appear.
 2. Tap the floor before confirming. It should say "Confirm the floor first" and place nothing.
 3. Press Rescan. The outline should go. The same plane should only come back after it changes, while another floor can be offered meanwhile.
 4. Press Use this floor. The outline should go, the debug readout should show PLANE FINDING off, and the PLANES count should stop going up while you walk around.
