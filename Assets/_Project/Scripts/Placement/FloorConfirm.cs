@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using ArEnclosure.Core;
+using Unity.XR.CoreUtils;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -15,8 +17,14 @@ namespace ArEnclosure.Placement
     /// held steady. Other planes at different heights only produce a warning:
     /// on a reflective floor a mirrored plane can sit below the real floor for
     /// the whole session and never merge, so a blocking check would never let
-    /// the user confirm. Once offered, the buttons stay until the candidate
+    /// the user confirm. Once offered, the offer stays until the candidate
     /// merges, moves beyond the band, or a much larger plane appears.
+    ///
+    /// The user checks the offer with a floor ring: a circle at the
+    /// candidate's height where the centre of the screen points. At the right
+    /// height it stays on one tile as the phone moves; at the wrong height it
+    /// slides (parallax). Plane outlines are not drawn during the offer, because
+    /// they reach past walls and make a correct floor look wrong.
     ///
     /// Confirming locks the floor and stops plane finding; existing planes
     /// keep tracking, so drift is still measured. Rescan skips the offered
@@ -26,6 +34,7 @@ namespace ArEnclosure.Placement
     {
         [SerializeField] ARPlaneManager m_PlaneManager;
         [SerializeField] FloorLock m_FloorLock;
+        [SerializeField] XROrigin m_XROrigin;
 
         [Header("Offer rules")]
         [Tooltip("No floor is offered before this much continuous tracking.")]
@@ -37,10 +46,16 @@ namespace ArEnclosure.Placement
         [Tooltip("Once offered, a plane this many times larger replaces the offer.")]
         [SerializeField] float m_LargerFactor = 1.5f;
 
-        [Header("Outline")]
-        [SerializeField] Material m_OutlineMaterial;
-        [SerializeField] Color m_OutlineColour = new Color(0.2f, 0.9f, 0.35f, 1f);
-        [SerializeField] float m_OutlineWidth = 0.015f;
+        [Header("Floor ring")]
+        [FormerlySerializedAs("m_OutlineMaterial")]
+        [SerializeField] Material m_RingMaterial;
+        [FormerlySerializedAs("m_OutlineColour")]
+        [SerializeField] Color m_RingColour = new Color(0.2f, 0.9f, 0.35f, 1f);
+        [FormerlySerializedAs("m_OutlineWidth")]
+        [SerializeField] float m_RingWidth = 0.012f;
+        [SerializeField] float m_RingRadius = 0.2f;
+        [Tooltip("The ring is hidden where the screen centre meets the floor further than this.")]
+        [SerializeField] float m_RingMaxDistance = 4f;
 
         struct Rejected
         {
@@ -48,6 +63,7 @@ namespace ArEnclosure.Placement
             public float Height;
         }
 
+        const int k_RingSegments = 48;
         static readonly int k_BaseColor = Shader.PropertyToID("_BaseColor");
 
         public bool IsConfirmed => m_FloorLock != null && m_FloorLock.HasLock;
@@ -65,13 +81,15 @@ namespace ArEnclosure.Placement
         float m_ReferenceHeight;
         float m_OfferedHeight;
         float m_TrackingSince = -1f;
-        LineRenderer m_Outline;
+        LineRenderer m_Ring;
+        LineRenderer m_Cross;
         MaterialPropertyBlock m_Block;
 
         void Awake()
         {
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
             if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
+            if (m_XROrigin == null) m_XROrigin = FindAnyObjectByType<XROrigin>();
             m_Block = new MaterialPropertyBlock();
 
             // Remember the mode set in the inspector so Reset restores exactly it.
@@ -96,7 +114,6 @@ namespace ArEnclosure.Placement
             {
                 HasOffer = false;
                 Warning = string.Empty;
-                SetOutline(null);
                 return;
             }
 
@@ -108,10 +125,20 @@ namespace ArEnclosure.Placement
             if (HasOffer)
             {
                 UpdateWarning();
-                SetOutline(m_Candidate);
-                Status = "Floor found (" + PlaneMetrics.Area(m_Candidate).ToString("F1") + " m2). Use this floor?" +
-                         (Warning.Length > 0 ? "\n" + Warning : "");
+                Status = "Floor found (" + PlaneMetrics.Area(m_Candidate).ToString("F1") + " m2).\n" +
+                         "Point at open floor. The ring must stay on one tile as you move the phone." +
+                         (Warning.Length > 0 ? "\n" + Warning : "") +
+                         "\nUse this floor?";
             }
+
+            m_FloorLock.HideAllPlanes = HasOffer;
+        }
+
+        void LateUpdate()
+        {
+            // After the camera pose has been updated this frame, so the ring
+            // does not lag behind the phone.
+            UpdateRing();
         }
 
         /// <summary>Lock the offered floor and stop ARCore finding more planes.</summary>
@@ -120,13 +147,12 @@ namespace ArEnclosure.Placement
             if (!HasOffer || m_Candidate == null) return;
 
             m_FloorLock.Lock(m_Candidate, m_Candidate.transform.position.y);
-            m_FloorLock.HighlightId = TrackableId.invalidId;
+            m_FloorLock.HideAllPlanes = false;
             m_PlaneManager.requestedDetectionMode = PlaneDetectionMode.None;
 
             HasOffer = false;
             m_Candidate = null;
             Warning = string.Empty;
-            SetOutline(null);
             Status = "Floor confirmed. Tap the floor to place.";
         }
 
@@ -206,22 +232,22 @@ namespace ArEnclosure.Placement
 
             HasOffer = true;
             m_OfferedHeight = y;
-            m_FloorLock.HighlightId = best.trackableId;
         }
 
         void UpdateWarning()
         {
-            if (!m_FloorLock.TryFindConflict(m_Candidate, out var gap))
-            {
-                Warning = string.Empty;
-                return;
-            }
+            m_FloorLock.FindConflicts(m_Candidate, out var above, out var below);
 
-            var cm = Mathf.Abs(gap * 100f).ToString("F0");
-            Warning = gap < 0f
-                ? "Another surface " + cm + " cm below (likely reflection)."
-                : "Another surface " + cm + " cm above (table, step or false floor?).";
+            Warning = string.Empty;
+            if (above.Found)
+                Warning += "Surface " + Cm(above.Gap) + " cm above (" + above.Area.ToString("F1") +
+                           " m2, table, step or false floor?).";
+            if (below.Found)
+                Warning += (Warning.Length > 0 ? "\n" : "") + "Surface " + Cm(below.Gap) + " cm below (" +
+                           below.Area.ToString("F1") + " m2, likely reflection).";
         }
+
+        static string Cm(float metres) => Mathf.Abs(metres * 100f).ToString("F0");
 
         bool FindLargest(out ARPlane largest)
         {
@@ -262,48 +288,80 @@ namespace ArEnclosure.Placement
             HasOffer = false;
             m_Candidate = null;
             Warning = string.Empty;
-            m_FloorLock.HighlightId = TrackableId.invalidId;
-            SetOutline(null);
+            if (m_FloorLock != null) m_FloorLock.HideAllPlanes = false;
         }
 
-        void SetOutline(ARPlane plane)
+        /// <summary>
+        /// Ring and cross at the candidate's height under the screen centre.
+        /// Pure maths, independent of the plane outline, so it shows exactly
+        /// the height the lock would use.
+        /// </summary>
+        void UpdateRing()
         {
-            if (plane == null)
+            var show = HasOffer && m_Candidate != null && m_XROrigin != null && m_XROrigin.Camera != null;
+            var centre = Vector3.zero;
+
+            if (show)
             {
-                if (m_Outline != null) m_Outline.enabled = false;
-                return;
+                var camera = m_XROrigin.Camera;
+                var ray = camera.ScreenPointToRay(new Vector2(camera.pixelWidth * 0.5f, camera.pixelHeight * 0.5f));
+                var height = m_Candidate.transform.position.y;
+                var along = ray.direction.y < -0.087f ? (height - ray.origin.y) / ray.direction.y : -1f;
+                if (along > 0f)
+                {
+                    centre = ray.GetPoint(along);
+                    show = Vector3.Distance(camera.transform.position, centre) <= m_RingMaxDistance;
+                }
+                else
+                {
+                    show = false;
+                }
             }
 
-            if (m_Outline == null)
+            EnsureRing();
+            m_Ring.enabled = show;
+            m_Cross.enabled = show;
+            if (!show) return;
+
+            centre.y += 0.003f;
+            for (var i = 0; i < k_RingSegments; i++)
             {
-                var go = new GameObject("FloorCandidateOutline");
-                m_Outline = go.AddComponent<LineRenderer>();
-                m_Outline.useWorldSpace = true;
-                m_Outline.loop = true;
-                m_Outline.widthMultiplier = m_OutlineWidth;
-                m_Outline.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                m_Outline.receiveShadows = false;
-                if (m_OutlineMaterial != null) m_Outline.sharedMaterial = m_OutlineMaterial;
-                m_Block.Clear();
-                m_Block.SetColor(k_BaseColor, m_OutlineColour);
-                m_Outline.SetPropertyBlock(m_Block);
+                var a = i * Mathf.PI * 2f / k_RingSegments;
+                m_Ring.SetPosition(i, centre + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * m_RingRadius);
             }
 
-            // Redrawn every frame: the outline keeps growing while finding is on.
-            var boundary = plane.boundary;
-            if (!boundary.IsCreated || boundary.Length < 3)
-            {
-                m_Outline.enabled = false;
-                return;
-            }
+            // A small cross marks the exact centre, easy to line up with grout.
+            var arm = m_RingRadius * 0.25f;
+            m_Cross.SetPosition(0, centre + Vector3.left * arm);
+            m_Cross.SetPosition(1, centre + Vector3.right * arm);
+            m_Cross.SetPosition(2, centre);
+            m_Cross.SetPosition(3, centre + Vector3.forward * arm);
+            m_Cross.SetPosition(4, centre + Vector3.back * arm);
+        }
 
-            m_Outline.enabled = true;
-            m_Outline.positionCount = boundary.Length;
-            for (var i = 0; i < boundary.Length; i++)
-            {
-                var local = new Vector3(boundary[i].x, 0.005f, boundary[i].y);
-                m_Outline.SetPosition(i, plane.transform.TransformPoint(local));
-            }
+        void EnsureRing()
+        {
+            if (m_Ring != null) return;
+            m_Ring = MakeLine("FloorRing", k_RingSegments, true);
+            m_Cross = MakeLine("FloorRingCross", 5, false);
+        }
+
+        LineRenderer MakeLine(string name, int points, bool loop)
+        {
+            var go = new GameObject(name);
+            var lr = go.AddComponent<LineRenderer>();
+            lr.useWorldSpace = true;
+            lr.loop = loop;
+            lr.positionCount = points;
+            lr.widthMultiplier = m_RingWidth;
+            lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            lr.receiveShadows = false;
+            if (m_RingMaterial != null) lr.sharedMaterial = m_RingMaterial;
+            m_Block.Clear();
+            m_Block.SetColor(k_BaseColor, m_RingColour);
+            lr.SetPropertyBlock(m_Block);
+            lr.enabled = false;
+            return lr;
         }
     }
 }

@@ -60,10 +60,12 @@ namespace ArEnclosure.Placement
         public float SettleRadius => m_SettleRadius;
 
         /// <summary>
-        /// Before the lock, a floor offered for confirmation. When set, only
-        /// this plane is drawn so the user sees exactly what they would accept.
+        /// Before the lock, while a floor is offered. Plane outlines reach past
+        /// walls and are drawn over them (no occlusion), which makes a correct
+        /// floor look wrong, so nothing is drawn while the user checks the
+        /// floor ring instead.
         /// </summary>
-        public TrackableId HighlightId { get; set; } = TrackableId.invalidId;
+        public bool HideAllPlanes { get; set; }
 
         readonly List<ARPlane> m_Scratch = new List<ARPlane>();
 
@@ -116,35 +118,49 @@ namespace ArEnclosure.Placement
             return true;
         }
 
-        /// <summary>
-        /// The usable plane near the candidate's outline whose height differs
-        /// most from it, beyond the band. Signed: negative means below the
-        /// candidate. Used as a warning only. On a reflective floor a mirrored
-        /// plane can sit below the real floor for the whole session and never
-        /// merge, so this must not block confirmation.
-        /// </summary>
-        public bool TryFindConflict(ARPlane candidate, out float signedGap)
+        public struct Conflict
         {
-            signedGap = 0f;
-            if (candidate == null || m_PlaneManager == null) return false;
+            public bool Found;
+            /// <summary>Height of the other plane minus the candidate's, in metres.</summary>
+            public float Gap;
+            public float Area;
+        }
+
+        /// <summary>
+        /// The usable planes near the candidate's outline that sit outside the
+        /// band, nearest in height above and nearest below. Used as a warning
+        /// only: on a reflective floor a mirrored plane can sit below the real
+        /// floor for the whole session and never merge, so this must not block.
+        /// </summary>
+        public void FindConflicts(ARPlane candidate, out Conflict above, out Conflict below)
+        {
+            above = default;
+            below = default;
+            if (candidate == null || m_PlaneManager == null) return;
 
             var y = candidate.transform.position.y;
             m_Scratch.Clear();
             foreach (var plane in m_PlaneManager.trackables) m_Scratch.Add(plane);
 
-            var found = false;
             foreach (var other in m_Scratch)
             {
                 if (other == candidate || !IsUsable(other)) continue;
                 var gap = other.transform.position.y - y;
                 if (Mathf.Abs(gap) <= m_HeightTolerance) continue;
-                if (Mathf.Abs(gap) <= Mathf.Abs(signedGap)) continue;
-                if (!IsNear(candidate, other)) continue;
-                signedGap = gap;
-                found = true;
-            }
 
-            return found;
+                if (gap > 0f)
+                {
+                    if (above.Found && gap >= above.Gap) continue;
+                    if (!IsNear(candidate, other)) continue;
+                    above = new Conflict { Found = true, Gap = gap, Area = PlaneMetrics.Area(other) };
+                }
+                else
+                {
+                    if (below.Found && gap <= below.Gap) continue;
+                    if (!IsNear(candidate, other)) continue;
+                    below = new Conflict { Found = true, Gap = gap, Area = PlaneMetrics.Area(other) };
+                }
+            }
         }
 
         bool IsNear(ARPlane candidate, ARPlane other)
@@ -192,7 +208,7 @@ namespace ArEnclosure.Placement
             {
                 bool visible;
                 if (HasLock) visible = plane.trackableId == CurrentId;
-                else if (HighlightId != TrackableId.invalidId) visible = plane.trackableId == HighlightId;
+                else if (HideAllPlanes) visible = false;
                 else visible = IsUsable(plane);
                 var planeRenderer = plane.GetComponent<Renderer>();
                 if (planeRenderer != null && planeRenderer.enabled != visible) planeRenderer.enabled = visible;
@@ -316,7 +332,7 @@ namespace ArEnclosure.Placement
 
         public void Clear()
         {
-            HighlightId = TrackableId.invalidId;
+            HideAllPlanes = false;
             HasLock = false;
             LockedId = TrackableId.invalidId;
             CurrentId = TrackableId.invalidId;
