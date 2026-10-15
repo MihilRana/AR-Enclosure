@@ -35,6 +35,8 @@ namespace ArEnclosure.Rules
         public Dictionary<string, JToken> applies_if = new Dictionary<string, JToken>();
         public string level;
         public string note;
+        /// <summary>Optional readable name for the UI. The rule id is shown when absent.</summary>
+        public string label;
     }
 
     /// <summary>What the user entered on the Inputs panel, saved between launches.</summary>

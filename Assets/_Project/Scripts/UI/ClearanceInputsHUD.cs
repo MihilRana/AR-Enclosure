@@ -143,9 +143,11 @@ namespace ArEnclosure.UI
             {
                 if (rule.face == "top") needsCeiling = true;
                 if (rule.value_source != "user_input") continue;
-                AddField(rule.id, rule.id.Replace('_', ' ') + " (" + rule.face + "), m");
+                // The readable name comes from the rule's optional label in
+                // rules.json, so the wording is data too. The id is the fallback.
+                AddField(rule.id, string.IsNullOrEmpty(rule.label) ? rule.id + " (m)" : rule.label);
             }
-            if (needsCeiling) AddField(k_CeilingId, "Ceiling height above floor, m");
+            if (needsCeiling) AddField(k_CeilingId, "Ceiling height (m)");
 
             RefreshValues();
         }
