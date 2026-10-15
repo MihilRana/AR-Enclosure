@@ -4,7 +4,26 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## 3.2 to 3.4 Phase B
 
-**Status:** built on `task-3.4b`, compiled clean. Engine and Play mode tested in the Editor. Waiting for the device test.
+**Status:** device test passed on the Pixel 9a on 2026-10-15. The label fix was checked in the Editor. Merged and tagged `task-3.4b`.
+
+**Device test (2026-10-15, 7 screenshots for the thesis)**
+
+- Steps 2 to 8 passed:
+  - Inputs panel with 3 toggles and 4 fields;
+  - ceiling 2.800 m gave a top gap of 0.875 m, FAIL against 1.000;
+  - ceiling 2.790 m gave 0.865 m, PASS against 0.500;
+  - with 2 conditions on, door_fixed_open_passing ran (unknown with no front wall);
+  - inputs were kept after a restart, and Reset inputs cleared them.
+- Step 9 (Debug layout): passed. The readout no longer runs under the verdict panel.
+- Step 1 (Move ring here): not reported (the report kept the template text). Still unconfirmed.
+- Data note: obstacle 1 at 15:31:57 in obstacles.csv sits at y = -0.457 m, against -1.11 to -1.37 m for the other obstacles that day. That session's confirmed floor was probably a raised surface (table or bed), so leave it out of the thesis data.
+- The verdict panel and measurement result were moved down about 64 px in the scene (to y = -104 and -114), clear of the phone's status bar. Kept.
+
+**Fix before merge: readable input labels**
+
+- `RuleDef` has an optional `label`. The Inputs panel shows it and falls back to the rule id.
+- rules.json: `label` added to the three vent rules ("Back ventilation gap (m)", "Side ventilation gap (m)", "Top ventilation gap (m)"). No values changed (3 added lines). The ceiling row reads "Ceiling height (m)".
+- Checked in Play mode: the panel rows read "Area is closed restricted", "Doors lock open", "Gangway longer than 10 m", the three ventilation labels and "Ceiling height (m)".
 
 **What was built (2026-10-15)**
 
@@ -50,7 +69,7 @@ Play mode: the panel built 3 toggles and 4 fields from rules.json. Using the con
 
 **Known issues**
 
-- The vent gap labels use the rule ids ("vent gap back (back), m").
+- The verdict panel still lists rules by id (for example `vent_gap_back`). Only the Inputs panel uses the labels.
 - The end wall check uses the nearest wall on either side.
 
 **Decisions already made (2026-10-14)**
