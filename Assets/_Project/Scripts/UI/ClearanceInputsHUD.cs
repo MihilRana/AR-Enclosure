@@ -201,7 +201,9 @@ namespace ArEnclosure.UI
             if (m_Inputs == null) return;
 
             foreach (var row in m_Toggles)
-                row.Text.text = row.Label + ":  " + (m_Inputs.IsConditionOn(row.Key) ? "<b>ON</b>" : "off");
+                row.Text.text = row.Label + ":  " + (m_Inputs.IsConditionOn(row.Key)
+                    ? "<color=" + UiPalette.PassHex + "><b>ON</b></color>"
+                    : "<color=" + UiPalette.MutedHex + ">off</color>");
 
             foreach (var row in m_Fields)
             {

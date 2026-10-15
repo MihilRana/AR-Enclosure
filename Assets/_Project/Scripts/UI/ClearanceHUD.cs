@@ -28,6 +28,8 @@ namespace ArEnclosure.UI
         [Tooltip("Panel (with background) that holds the readout. Hidden in Measure mode.")]
         [SerializeField] GameObject m_Panel;
         [SerializeField] TMP_Text m_Readout;
+        [Tooltip("Thin bar on the panel's left edge, coloured by the verdict.")]
+        [SerializeField] Image m_VerdictStrip;
 
         [Header("Obstacle buttons")]
         [SerializeField] Button m_KindButton;
@@ -40,6 +42,8 @@ namespace ArEnclosure.UI
         [SerializeField] TMP_Text m_DebugLabel;
         [SerializeField] GameObject m_ScaleReadout;
         [SerializeField] PlaneDiagnostics m_PlaneDiagnostics;
+        [Tooltip("Background panels behind the debug readouts, shown and hidden with them.")]
+        [SerializeField] GameObject[] m_DebugPanels;
         [SerializeField] bool m_ShowDebug = true;
 
         readonly StringBuilder m_Builder = new StringBuilder();
@@ -89,13 +93,17 @@ namespace ArEnclosure.UI
 
             if (m_ScaleReadout != null && m_ScaleReadout.activeSelf != m_ShowDebug) m_ScaleReadout.SetActive(m_ShowDebug);
             if (m_PlaneDiagnostics != null) m_PlaneDiagnostics.ShowReadout = m_ShowDebug;
-            if (m_DebugLabel != null) m_DebugLabel.text = m_ShowDebug ? "Debug: on" : "Debug: off";
+            if (m_DebugPanels != null)
+                foreach (var panel in m_DebugPanels)
+                    if (panel != null && panel.activeSelf != m_ShowDebug) panel.SetActive(m_ShowDebug);
+            if (m_DebugLabel != null) m_DebugLabel.text = m_ShowDebug ? "Debug on" : "Debug off";
 
             var showPanel = mode != AppMode.Measure;
             if (m_Panel != null && m_Panel.activeSelf != showPanel) m_Panel.SetActive(showPanel);
             if (!showPanel || m_Readout == null) return;
 
             m_Readout.text = BuildText(obstacleMode);
+            if (m_VerdictStrip != null) m_VerdictStrip.color = StripColour(m_Checker.Last);
         }
 
         string BuildText(bool obstacleMode)
@@ -105,13 +113,13 @@ namespace ArEnclosure.UI
 
             if (obstacleMode && m_Tool != null)
             {
-                m_Builder.Append("<color=#ffd27f>").Append(m_Tool.Prompt).AppendLine("</color>");
+                m_Builder.Append("<color=" + UiPalette.PromptHex + ">").Append(m_Tool.Prompt).AppendLine("</color>");
                 m_Builder.AppendLine();
             }
 
             if (c == null || c.Verdict == Verdict.RulesNotLoaded)
             {
-                m_Builder.AppendLine("<b><color=#ff6060>RULES NOT LOADED</color></b>");
+                m_Builder.AppendLine("<b><color=" + UiPalette.FailHex + ">RULES NOT LOADED</color></b>");
                 if (!string.IsNullOrEmpty(m_Checker.LoadError)) m_Builder.AppendLine(m_Checker.LoadError);
                 return m_Builder.ToString();
             }
@@ -130,14 +138,14 @@ namespace ArEnclosure.UI
             switch (c.Verdict)
             {
                 case Verdict.Compliant:
-                    m_Builder.Append("<size=130%><b><color=#4ee06a>COMPLIANT</color></b></size>")
-                        .Append(" (").Append(c.Standard).AppendLine(" checks)");
+                    m_Builder.Append("<size=44><b><color=" + UiPalette.PassHex + ">COMPLIANT</color></b></size>\n")
+                        .Append("<color=" + UiPalette.MutedHex + ">").Append(c.Standard).AppendLine(" checks</color>");
                     break;
                 case Verdict.NotCompliant:
-                    m_Builder.AppendLine("<size=130%><b><color=#ff5050>NOT COMPLIANT</color></b></size>");
+                    m_Builder.AppendLine("<size=44><b><color=" + UiPalette.FailHex + ">NOT COMPLIANT</color></b></size>");
                     break;
                 default:
-                    m_Builder.AppendLine("<size=130%><b><color=#ffc34d>INCOMPLETE</color></b></size>");
+                    m_Builder.AppendLine("<size=44><b><color=" + UiPalette.WarnHex + ">INCOMPLETE</color></b></size>");
                     m_Builder.Append(c.BlockingCount).AppendLine(c.BlockingCount == 1
                         ? " required check has no result yet"
                         : " required checks have no result yet");
@@ -168,7 +176,7 @@ namespace ArEnclosure.UI
                 m_Builder.Append("  min ");
                 m_Builder.Append(r.RequiredM.HasValue ? r.RequiredM.Value.ToString("F3") + " m" : "-");
                 if (r.Status != RuleStatus.Pass && r.Status != RuleStatus.Fail && !string.IsNullOrEmpty(r.Detail))
-                    m_Builder.Append("  <color=#bbbbbb>").Append(r.Detail).Append("</color>");
+                    m_Builder.Append("  <size=22><color=" + UiPalette.MutedHex + ">").Append(r.Detail).Append("</color></size>");
                 m_Builder.AppendLine();
             }
 
@@ -189,13 +197,26 @@ namespace ArEnclosure.UI
         {
             switch (status)
             {
-                case RuleStatus.Pass: return "<color=#4ee06a><b>PASS</b></color>";
-                case RuleStatus.Fail: return "<color=#ff5050><b>FAIL</b></color>";
-                case RuleStatus.Warn: return "<color=#ffc34d><b>WARN</b></color>";
-                case RuleStatus.NotSet: return "<color=#ffc34d>not set</color>";
-                case RuleStatus.NotEntered: return "<color=#bbbbbb>not entered</color>";
-                case RuleStatus.Unknown: return "<color=#ffc34d>unknown</color>";
-                default: return "<color=#bbbbbb>n/a</color>";
+                case RuleStatus.Pass: return "<color=" + UiPalette.PassHex + "><b>PASS</b></color>";
+                case RuleStatus.Fail: return "<color=" + UiPalette.FailHex + "><b>FAIL</b></color>";
+                case RuleStatus.Warn: return "<color=" + UiPalette.WarnHex + "><b>WARN</b></color>";
+                case RuleStatus.NotSet: return "<color=" + UiPalette.WarnHex + ">not set</color>";
+                case RuleStatus.NotEntered: return "<color=" + UiPalette.MutedHex + ">not entered</color>";
+                case RuleStatus.Unknown: return "<color=" + UiPalette.WarnHex + ">unknown</color>";
+                default: return "<color=" + UiPalette.MutedHex + ">n/a</color>";
+            }
+        }
+
+        /// <summary>Presentation only: the strip mirrors the verdict already shown as text.</summary>
+        static Color StripColour(CheckResult c)
+        {
+            if (c == null) return UiPalette.Muted;
+            switch (c.Verdict)
+            {
+                case Verdict.Compliant: return UiPalette.Pass;
+                case Verdict.NotCompliant: return UiPalette.Fail;
+                case Verdict.Incomplete: return UiPalette.Warn;
+                default: return UiPalette.Muted;
             }
         }
 
