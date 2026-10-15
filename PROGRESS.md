@@ -2,6 +2,86 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 3.2 to 3.4 Phase B
+
+**Status:** device test passed on the Pixel 9a on 2026-10-15. The label fix was checked in the Editor. Merged and tagged `task-3.4b`.
+
+**Device test (2026-10-15, 7 screenshots for the thesis)**
+
+- Steps 2 to 8 passed:
+  - Inputs panel with 3 toggles and 4 fields;
+  - ceiling 2.800 m gave a top gap of 0.875 m, FAIL against 1.000;
+  - ceiling 2.790 m gave 0.865 m, PASS against 0.500;
+  - with 2 conditions on, door_fixed_open_passing ran (unknown with no front wall);
+  - inputs were kept after a restart, and Reset inputs cleared them.
+- Step 9 (Debug layout): passed. The readout no longer runs under the verdict panel.
+- Step 1 (Move ring here): not reported (the report kept the template text). Still unconfirmed.
+- Data note: obstacle 1 at 15:31:57 in obstacles.csv sits at y = -0.457 m, against -1.11 to -1.37 m for the other obstacles that day. That session's confirmed floor was probably a raised surface (table or bed), so leave it out of the thesis data.
+- The verdict panel and measurement result were moved down about 64 px in the scene (to y = -104 and -114), clear of the phone's status bar. Kept.
+
+**Fix before merge: readable input labels**
+
+- `RuleDef` has an optional `label`. The Inputs panel shows it and falls back to the rule id.
+- rules.json: `label` added to the three vent rules ("Back ventilation gap (m)", "Side ventilation gap (m)", "Top ventilation gap (m)"). No values changed (3 added lines). The ceiling row reads "Ceiling height (m)".
+- Checked in Play mode: the panel rows read "Area is closed restricted", "Doors lock open", "Gangway longer than 10 m", the three ventilation labels and "Ceiling height (m)".
+
+**What was built (2026-10-15)**
+
+- **Conditions are data.** `ConditionState` no longer names any condition in code. Each `applies_if` entry in rules.json becomes a switch written as "key=value", for example `area=closed_restricted`, `doors_lock_open=true` and `gangway_length_gt_m=10` (meaning the user confirms the gangway is longer than 10 m). A rule runs only when all of its switches are on. A new condition in rules.json needs no code change.
+- **Top gap from the ceiling height.** For `face: top`, the gap is the ceiling height above the floor minus the panel's height from the model bounds (1.9247 m). Without a ceiling height, the result is unknown ("ceiling height not entered"). New `ClearanceGeometry.PanelHeight`.
+- **`Rules/ClearanceInputs.cs` (new)** holds the switched-on conditions, the manufacturer vent gaps and the ceiling height. It saves them to `clearance_inputs.json` in persistentDataPath on every change and loads them at start. **Reset inputs** clears everything and deletes the file. A damaged file is ignored with a warning.
+- **`UI/ClearanceInputsHUD.cs` (new):** an **Inputs** button in Obstacle mode (right column, 180 slot) opens a panel. Its rows are built from rules.json once it loads:
+  - one toggle per `applies_if` condition, labelled from the file (for example "Gangway longer than 10 m");
+  - one metres field per `user_input` rule;
+  - a "Ceiling height above floor" field when any rule checks the top face.
+
+  Fields accept 0 to 10 m and a comma or point decimal. Empty means "not entered", and invalid text is rejected with a message. The panel also has Reset inputs and Done buttons, and it blocks taps on the floor behind it.
+- The verdict panel shows "Conditions on N   Ceiling X m / not entered".
+- `rule_checks.csv` has two new columns, `conditions_on` and `ceiling_height_m`, and any input change logs a new check. The existing file is renamed aside automatically when its header changes.
+- **Debug layout:** the scale readout is 470 px wide (was 700) and wraps, so it ends at x = 500 where the verdict panel starts. Its CSV line shows only the file name.
+- `DOL_*` parts: unchanged, as agreed.
+- "Move ring here" check: the scene reference is correct, and the button is shown and hidden by the same line, with the same condition, as Use this floor and Rescan. No defect was found. It sits bottom-left, above Mode, so it may have been missed. Look for it in this test.
+
+**Editor tests**
+
+| Case | Result |
+|---|---|
+| Defaults | COMPLIANT, 3 not entered |
+| All 3 conditions on, wall 0.750 m in front, wall 0.200 m to the side | door_fixed_open_passing 0.750 - 0.587 = 0.163, FAIL; end_wall_access 0.200, WARN (advisory) |
+| Vent values entered, no ceiling | vent_gap_top unknown, blocking |
+| Ceiling 2.800 m | top gap 0.875, PASS |
+| Back vent 0.400 against a 0.300 gap | FAIL |
+
+Play mode: the panel built 3 toggles and 4 fields from rules.json. Using the controls, area ON, back 0.25 and ceiling "2,8" were saved, "abc" was rejected, and the file was written. After a Play mode restart the values reloaded. Reset inputs cleared them and deleted the file.
+
+**How to test on the phone**
+
+1. Confirm the floor and place as before. In Move mode, while a floor is offered, check for **Move ring here** at bottom left, above Mode, and try it once.
+2. Go to Obstacle mode. **Inputs** should appear at the right. Open it: there should be 3 condition toggles, 3 vent fields and a ceiling field.
+3. Enter a ceiling height (tape floor to ceiling) and press Done. vent_gap_top should still read "not entered" until a top value is entered. The summary should show the ceiling.
+4. Enter a top vent gap, for example 0.300. vent_gap_top should PASS or FAIL against ceiling minus 1.925 m.
+5. Mark a wall behind the panel, enter a back vent gap larger than the measured gap, and check that vent_gap_back FAILS and the verdict reads NOT COMPLIANT.
+6. Switch on "Area is closed restricted" and "Doors lock open". door_fixed_open_passing should run (front gap minus 0.587 against 0.500).
+7. Close and reopen the app. The inputs should still be there.
+8. Press Reset inputs. Everything should be cleared and the conditions off.
+9. Debug on: the scale readout should wrap and not run under the verdict panel.
+10. Pull the logs: `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/rule_checks.csv` (the new file has the `conditions_on` and `ceiling_height_m` columns) and `clearance_inputs.json`.
+
+**Known issues**
+
+- The verdict panel still lists rules by id (for example `vent_gap_back`). Only the Inputs panel uses the labels.
+- The end wall check uses the nearest wall on either side.
+
+**Decisions already made (2026-10-14)**
+
+- Condition toggles for `applies_if`: area (not set / closed restricted), doors lock open (off / on), gangway longer than 10 m (off / on). All default to off.
+- Vent gap inputs for back, side and top, in metres. An empty field means "not entered" (skipped).
+- **Ceiling height field: yes.** The top gap = ceiling height minus the panel top (1.925 m).
+- **Persistence: yes.** Conditions, vent values and ceiling height are saved between launches in `clearance_inputs.json` in `persistentDataPath`, with a **"Reset inputs"** button that clears them.
+- **`DOL_*` parts: no code.** The user will check the model later. If they are door leaves, it is a `model_profile.json` change only.
+- **Debug layout fix: yes.** Narrow the scale readout so its lines wrap, and shorten its long status lines, so nothing runs under the verdict panel with Debug on.
+- First item when Phase B starts: check why the "Move ring here" button was not seen on the device in the 3.2b test.
+
 ## 3.2b Confirm the floor, then stop plane finding
 
 **Status:** passed on the device on 2026-10-14 after four test rounds (blocking gate, then advising gate, then a ring under the screen centre, then a fixed ring). Merged and tagged `task-3.2b`.
@@ -55,7 +135,7 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 - The ring dropped and the prompt changed. Stepping sideways, the ring stayed on its tile on the real floor.
 - One offer needed Rescan, and Rescan fixed it.
 - Confirm, place, drag, measure, obstacles and Reset all worked.
-- Move ring here: not confirmed in this test ("no" in the report). It is listed as unverified.
+- Move ring here: not tried, and the button was **not seen** on the device. Unverified; possibly not showing. To be checked at the start of Phase B.
 - Build note: one build failed because Gradle could not delete `libc++_shared.so` in `Library/Bee/.../intermediates/cxx/.../obj/arm64-v8a`. That file is a hard link to the NDK's admin-owned copy in `E:\Program Files` (project and Unity are on the same drive), so it carries read-only permissions. It was fixed by deleting the link from an administrator PowerShell; the NDK file is untouched. This can recur when Gradle reconfigures the native build.
 
 **3.2b status:** passed on the Pixel 9a. Merged and tagged `task-3.2b`.
