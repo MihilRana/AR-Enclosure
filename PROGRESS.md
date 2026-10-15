@@ -2,9 +2,18 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## BUILD FROZEN for the user study (2026-10-15)
+
+The user-study build is the `master` commit tagged **`user-study-freeze`**, which merges the UI polish (`task-ui-polish`) on top of all earlier tasks. It was tested on the Pixel 9a.
+
+- **No code, scene, asset or rules.json changes** during the user study. Install the APK built from this tag, and keep a copy of that exact APK with the study data.
+- Data files written during sessions (in `persistentDataPath`, pulled with `adb pull /sdcard/Android/data/com.mihil.arenclosure/files/<file>`): `scale_verification.csv`, `measurements.csv`, `obstacles.csv`, `rule_checks.csv`, `plane_diagnostics_v2.csv`, `clearance_inputs.json`.
+- Any fix found during the study goes on a new branch after the study. It does not change the frozen build.
+- Not built, and outside the frozen scope: 3.5 clearance zones and 3.8 README.
+
 ## UI polish before the freeze (branch task-ui-polish)
 
-**Status:** built, compiled clean, checked in Play mode (screenshots in `docs/ui-polish/`). Waiting for the device test. After it passes, the build is frozen for the user study.
+**Status:** passed on the Pixel 9a on 2026-10-15, all 8 checks (readable on tiles, MOVE label and offer buttons, verdict strip red below 0.700 m, Debug chip and readouts, measure panel and amber markers, two-tap Reset, Inputs panel, full pass unchanged). Merged, tagged `task-ui-polish`, and frozen as `user-study-freeze`.
 
 **Scope:** looks only, plus the agreed Reset confirm. No change to logic, tap handling, `UiTouchFilter` or CSV output. Every button keeps its exact rectangle except the Debug chip. This was checked by comparing all 17 button rectangles before and after.
 
