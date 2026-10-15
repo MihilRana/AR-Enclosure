@@ -42,6 +42,7 @@ namespace ArEnclosure.Obstacles
         GameObject m_Pending;
         Vector3 m_PendingPoint;
         float m_NoticeUntil = -1f;
+        ARPlacementController m_Placement;
 
         void Awake()
         {
@@ -50,17 +51,20 @@ namespace ArEnclosure.Obstacles
             if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
             if (m_Obstacles == null) m_Obstacles = FindAnyObjectByType<ObstacleSet>();
             if (m_XROrigin == null) m_XROrigin = FindAnyObjectByType<XROrigin>();
+            m_Placement = FindAnyObjectByType<ARPlacementController>();
         }
 
         void OnEnable()
         {
             EnhancedTouchSupport.Enable();
             if (m_Modes != null) m_Modes.ModeChanged += OnModeChanged;
+            if (m_Placement != null) m_Placement.SessionReset += CancelPending;
         }
 
         void OnDisable()
         {
             if (m_Modes != null) m_Modes.ModeChanged -= OnModeChanged;
+            if (m_Placement != null) m_Placement.SessionReset -= CancelPending;
             EnhancedTouchSupport.Disable();
         }
 

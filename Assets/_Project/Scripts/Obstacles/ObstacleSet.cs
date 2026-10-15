@@ -41,11 +41,28 @@ namespace ArEnclosure.Obstacles
         int m_NextId = 1;
         MaterialPropertyBlock m_Block;
 
+        ArEnclosure.Placement.ARPlacementController m_Placement;
+
         void Awake()
         {
             m_Log = new CsvLog(k_FileName, k_Header);
             m_Block = new MaterialPropertyBlock();
+            m_Placement = FindAnyObjectByType<ArEnclosure.Placement.ARPlacementController>();
         }
+
+        void OnEnable()
+        {
+            if (m_Placement != null) m_Placement.SessionReset += OnSessionReset;
+        }
+
+        void OnDisable()
+        {
+            if (m_Placement != null) m_Placement.SessionReset -= OnSessionReset;
+        }
+
+        // A restarted AR session has a new coordinate frame, so the old lines
+        // would sit in the wrong place. Logged as "reset", not "clear".
+        void OnSessionReset() => ClearAll("reset");
 
         public void Add(ObstacleKind kind, Vector3 a, Vector3 b)
         {
@@ -68,13 +85,15 @@ namespace ArEnclosure.Obstacles
             Changed?.Invoke();
         }
 
-        public void Clear()
+        public void Clear() => ClearAll("clear");
+
+        void ClearAll(string reason)
         {
             if (m_Lines.Count == 0) return;
             foreach (var v in m_Visuals) if (v != null) Destroy(v);
             m_Visuals.Clear();
             m_Lines.Clear();
-            Log("clear", default);
+            Log(reason, default);
             Changed?.Invoke();
         }
 
@@ -134,7 +153,7 @@ namespace ArEnclosure.Obstacles
         void Log(string evt, ObstacleLine line)
         {
             var ci = CsvLog.Ci;
-            var has = evt != "clear";
+            var has = evt != "clear" && evt != "reset";
             m_Log.Append(new[]
             {
                 DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", ci),

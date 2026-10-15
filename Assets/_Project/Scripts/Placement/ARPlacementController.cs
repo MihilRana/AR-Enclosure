@@ -54,6 +54,8 @@ namespace ArEnclosure.Placement
         [SerializeField] FloorLock m_FloorLock;
         [Tooltip("Optional. When set, the user must accept one floor before anything is placed.")]
         [SerializeField] FloorConfirm m_FloorConfirm;
+        [Tooltip("Reset also restarts the AR session, like reopening the app: all planes, anchors, obstacles and measurement points are cleared.")]
+        [SerializeField] bool m_ResetArSession = true;
         [Tooltip("How long a refused-tap message stays on screen.")]
         [SerializeField] float m_NoticeSeconds = 2.5f;
 
@@ -72,6 +74,8 @@ namespace ArEnclosure.Placement
 
         public event Action<PlacementReport> Placed;
         public event Action Cleared;
+        /// <summary>The AR session was restarted: all world positions from before are invalid.</summary>
+        public event Action SessionReset;
 
         readonly List<ARRaycastHit> m_Hits = new List<ARRaycastHit>();
         GameObject m_Instance;
@@ -471,7 +475,15 @@ namespace ArEnclosure.Placement
             m_Reference.transform.localScale = new Vector3(0.02f, 1.000f, 0.02f);
         }
 
-        /// <summary>Wire this to a Reset button so you can repeat the test.</summary>
+        /// <summary>
+        /// Wire this to a Reset button. Behaves like closing and reopening the
+        /// app: the panel and floor lock are cleared and, when enabled, the AR
+        /// session itself is restarted. Re-enabling plane finding alone leaves
+        /// every old plane in place, so the same floor (right or wrong) came
+        /// straight back. A session restart removes all planes and anchors and
+        /// starts a new coordinate frame, so SessionReset tells the obstacle
+        /// and measurement tools to drop points that would now be misplaced.
+        /// </summary>
         public void Clear()
         {
             if (m_Instance != null) Destroy(m_Instance);
@@ -480,7 +492,16 @@ namespace ArEnclosure.Placement
             m_Reference = null;
             if (m_FloorLock != null) m_FloorLock.Clear();
             if (m_FloorConfirm != null) m_FloorConfirm.ResetSearch();
-            Status = "Cleared. Tap a surface.";
+
+            if (m_ResetArSession)
+            {
+                var session = FindAnyObjectByType<ARSession>();
+                if (session != null) session.Reset();
+                m_TrackingStartedAt = -1f;
+                SessionReset?.Invoke();
+            }
+
+            Status = "Cleared. Scanning for the floor.";
             Cleared?.Invoke();
         }
     }
