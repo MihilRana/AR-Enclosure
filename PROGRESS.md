@@ -2,6 +2,43 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## UI polish before the freeze (branch task-ui-polish)
+
+**Status:** built, compiled clean, checked in Play mode (screenshots in `docs/ui-polish/`). Waiting for the device test. After it passes, the build is frozen for the user study.
+
+**Scope:** looks only, plus the agreed Reset confirm. No change to logic, tap handling, `UiTouchFilter` or CSV output. Every button keeps its exact rectangle except the Debug chip. This was checked by comparing all 17 button rectangles before and after.
+
+**What changed**
+
+- **Palette (`UI/UiPalette.cs`, new):** pass `#22C55E`, fail `#EF4444`, warn/incomplete `#F59E0B`, muted `#A1A1AA`, prompt `#FCD34D`. It is used for the HUD text, the gap lines, the floor ring (pass green) and the measurement markers (amber). Obstacle colours: wall `#F97316`, enclosure `#38BDF8`.
+- **Rounded panels:** a new 9-slice sprite, `Assets/_Project/UI/RoundedPanel.png`, used by every panel and button. Panels are slate `#0F172A` at 94% and the Inputs panel is opaque. The project renders in linear colour space, so lighter alphas looked mid-grey on bright backgrounds.
+- **Backgrounds behind all text:** the measurement result now sits in its own panel where the verdict panel sits in other modes. The scale and plane readouts have panels that hide with Debug.
+- **Button roles:**
+  - primary (blue): Use this floor, Close loop, Done;
+  - secondary (slate): Mode, Rescan, Move ring here, Distance/Perimeter, Kind, Undo, Inputs, toggles;
+  - destructive (red): Reset, Clear, Clear obstacles, Reset inputs;
+  - warning (amber, dark text): Re-seat on floor.
+- **Type:** verdict 44 bold; buttons 34 bold, shrinking no lower than 26 to 28; verdict body 26 (20 to 26); details 22 muted; measurement result 28.
+- **Mode label:** "MOVE ›", "MEASURE ›", "OBSTACLE ›".
+- **Verdict strip:** an 8 px bar on the verdict panel's left edge, green, red or amber by verdict (grey before placement). It is set in `ClearanceHUD` from the verdict already shown as text.
+- **Debug chip:** 180 × 72 at top-left (30, -104), showing "Debug on/off". The debug readouts now start below it: scale readout at (30, -196), 470 × 740; plane readout at (30, -956), 470 × 370.
+- **Reset confirm:** the first tap changes the label to "Tap again to reset" for 2 s, and a second tap within 2 s resets. Implemented in `PlacementHUD`. The scene's persistent Reset listener was removed so nothing else can trigger it. Play mode check: after one tap the panel was still placed, after a second tap it was cleared.
+- **Inputs panel:** dark input fields with white text, an italic grey placeholder, and green ON / grey off.
+- **Gap lines:** 12 mm thick (was 8).
+
+**Files touched:** `UI/UiPalette.cs` (new), `UI/ClearanceHUD.cs`, `UI/MeasurementHUD.cs`, `UI/ClearanceInputsHUD.cs`, `UI/PlacementHUD.cs`, `UI/RoundedPanel.png` (new), `Materials/MeasureMarker.mat`, `Materials/ObstacleFence.mat`, `Scenes/ARPlacement.unity`.
+
+**How to test on the phone**
+
+1. On bright tiles, in daylight: the verdict panel, measurement result and debug readouts should all be readable. Buttons should be easy to tell apart (blue = do it, red = destructive, amber = Re-seat).
+2. Move mode: the mode button reads "MOVE ›". During a floor offer: Use this floor is blue, Rescan and Move ring here are slate.
+3. Place, mark a wall and check the verdict. The left strip should turn green, red or amber with the verdict. Drag closer than 0.700 m and check it turns red.
+4. Debug chip at top-left: the readouts should start below it, not under it, and both hide together with Debug off.
+5. Measure mode: the result appears in a dark panel at top right, and markers and line are amber.
+6. Reset: one tap should change the label to "Tap again to reset", and nothing should happen. Wait 2 s and the label should return to "Reset". Tap twice quickly: it should reset.
+7. Inputs panel: dark fields, green ON, opaque panel. Typing values should still work.
+8. Run one full pass (floor, place, drag, measure, obstacle, inputs) to confirm nothing changed in behaviour.
+
 ## Pre-freeze fixes (on branch task-3.5; 3.5 clearance zones skipped for now)
 
 **Status:** passed on the Pixel 9a on 2026-10-15. Merged and tagged `task-3.5`. The freeze waits for a visual polish pass (looks only), agreed with the user.
