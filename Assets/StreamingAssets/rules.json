@@ -7,6 +7,7 @@
   "rules": [
     {
       "id": "front_gangway",
+      "label": "Front gangway",
       "face": "front",
       "min_m": 0.700,
       "source": "IEC 60364-7-729, clause 729.513.2.1 b)",
@@ -21,6 +22,7 @@
     },
     {
       "id": "front_handle_clearance",
+      "label": "Handle clearance",
       "face": "front",
       "min_m": 0.600,
       "source": "IEC 60364-7-729, clause 729.513.2.1 a)",
@@ -35,6 +37,7 @@
     },
     {
       "id": "door_swing_90",
+      "label": "Door swing",
       "face": "front",
       "min_m": null,
       "source": "IEC 60364-7-729, clause 729.513.2 and Annex A, clause A.1",
@@ -49,6 +52,7 @@
     },
     {
       "id": "door_fixed_open_passing",
+      "label": "Door fixed open passing",
       "face": "front",
       "min_m": 0.500,
       "source": "IEC 60364-7-729, Annex A, clause A.1",
@@ -63,6 +67,7 @@
     },
     {
       "id": "end_wall_access",
+      "label": "End wall access",
       "face": "side",
       "min_m": 0.700,
       "source": "IEC 60364-7-729, clause 729.513.2.3, Note 1",

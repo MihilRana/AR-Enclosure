@@ -161,7 +161,7 @@ namespace ArEnclosure.UI
 
             foreach (var r in c.Rules)
             {
-                m_Builder.Append(r.Rule.id).Append("  ").AppendLine(StatusTag(r.Status));
+                m_Builder.Append(DisplayName(r.Rule)).Append("  ").AppendLine(StatusTag(r.Status));
                 m_Builder.Append("   ");
                 if (r.MeasuredM.HasValue) m_Builder.Append(r.MeasuredM.Value.ToString("F3")).Append(" m");
                 else m_Builder.Append("-");
@@ -173,6 +173,16 @@ namespace ArEnclosure.UI
             }
 
             return m_Builder.ToString();
+        }
+
+        /// <summary>
+        /// The rule's label from rules.json without its unit suffix, since each
+        /// line already shows metres. The id is the fallback; CSVs keep the id.
+        /// </summary>
+        static string DisplayName(RuleDef rule)
+        {
+            if (string.IsNullOrEmpty(rule.label)) return rule.id;
+            return System.Text.RegularExpressions.Regex.Replace(rule.label, @"\s*\(m\)\s*$", "");
         }
 
         static string StatusTag(RuleStatus status)

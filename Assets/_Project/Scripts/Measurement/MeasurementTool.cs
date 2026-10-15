@@ -79,6 +79,7 @@ namespace ArEnclosure.Measurement
         bool m_AllPlanesTracking = true;
         float m_NoticeUntil = -1f;
         bool m_UsedLockedFloor;
+        ARPlacementController m_Placement;
 
         void Awake()
         {
@@ -87,6 +88,8 @@ namespace ArEnclosure.Measurement
             if (m_RaycastManager == null) m_RaycastManager = FindAnyObjectByType<ARRaycastManager>();
             if (m_PlaneManager == null) m_PlaneManager = FindAnyObjectByType<ARPlaneManager>();
             if (m_FloorLock == null) m_FloorLock = FindAnyObjectByType<FloorLock>();
+            // Points from before an AR session restart are in the old frame.
+            m_Placement = FindAnyObjectByType<ARPlacementController>();
             m_Log = new MeasurementLog(m_FileName);
         }
 
@@ -94,11 +97,13 @@ namespace ArEnclosure.Measurement
         {
             EnhancedTouchSupport.Enable();
             if (m_Modes != null) m_Modes.ModeChanged += OnModeChanged;
+            if (m_Placement != null) m_Placement.SessionReset += ClearPoints;
         }
 
         void OnDisable()
         {
             if (m_Modes != null) m_Modes.ModeChanged -= OnModeChanged;
+            if (m_Placement != null) m_Placement.SessionReset -= ClearPoints;
             EnhancedTouchSupport.Disable();
         }
 
