@@ -28,6 +28,8 @@ namespace ArEnclosure.UI
 
         [Header("Readout")]
         [SerializeField] TMP_Text m_Result;
+        [Tooltip("Optional background panel behind the result, shown and hidden with it.")]
+        [SerializeField] GameObject m_ResultPanel;
 
         readonly StringBuilder m_Builder = new StringBuilder();
 
@@ -72,7 +74,8 @@ namespace ArEnclosure.UI
 
             var measuring = m_Modes.Current == AppMode.Measure;
 
-            if (m_ModeLabel != null) m_ModeLabel.text = "Mode: " + m_Modes.Current;
+            // "MOVE ›": the current mode, and the arrow says a tap moves on.
+            if (m_ModeLabel != null) m_ModeLabel.text = m_Modes.Current.ToString().ToUpperInvariant() + "  ›";
 
             SetVisible(m_KindButton, measuring);
             SetVisible(m_ClearButton, measuring);
@@ -83,6 +86,7 @@ namespace ArEnclosure.UI
 
             // The clearance panel uses the same corner outside Measure mode.
             if (m_Result.gameObject.activeSelf != measuring) m_Result.gameObject.SetActive(measuring);
+            if (m_ResultPanel != null && m_ResultPanel.activeSelf != measuring) m_ResultPanel.SetActive(measuring);
             if (!measuring) return;
 
             m_Builder.Clear();
@@ -102,7 +106,7 @@ namespace ArEnclosure.UI
                 m_Builder.AppendLine(r.Kind == MeasureKind.Distance ? "Distance" : "Perimeter, " + r.Points.Length + " pts");
                 m_Builder.AppendLine("<size=150%><b>" + r.Metres.ToString("F3") + " m</b></size>");
                 m_Builder.AppendLine("Camera " + r.CameraDistance.ToString("F2") + " m away");
-                m_Builder.AppendLine(r.Logged ? "Saved to CSV" : "<color=#ff6060>CSV write failed</color>");
+                m_Builder.AppendLine(r.Logged ? "Saved to CSV" : "<color=" + UiPalette.FailHex + ">CSV write failed</color>");
             }
 
             m_Result.text = m_Builder.ToString();
