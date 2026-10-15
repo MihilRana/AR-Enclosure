@@ -4,7 +4,15 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
 ## Pre-freeze fixes (on branch task-3.5; 3.5 clearance zones skipped for now)
 
-**Status:** built, compiled clean, both fixes checked in Play mode. Waiting for the device test. Once these pass on the device, **the build is frozen for the user study**.
+**Status:** passed on the Pixel 9a on 2026-10-15. Merged and tagged `task-3.5`. The freeze waits for a visual polish pass (looks only), agreed with the user.
+
+**Device test (2026-10-15):**
+
+- Reset cleared the panel, the floor, the wall and the measurement, and the floor search restarted on fresh planes without reopening the app.
+- Placing again worked, and the inputs were kept.
+- The verdict panel showed readable names.
+- obstacles.csv has `reset` rows at 21:11:37 and 21:13:55, each after a wall was added.
+- Note: obstacle ids keep counting across a Reset (the first wall after the 21:11 reset was id 2). This is harmless; ids are unique per app run.
 
 **1. Bug: Reset cleared the panel but not the floor**
 
