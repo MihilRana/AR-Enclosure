@@ -37,6 +37,18 @@ namespace ArEnclosure.Rules
         public string note;
     }
 
+    /// <summary>What the user entered on the Inputs panel, saved between launches.</summary>
+    [Preserve]
+    public class ClearanceInputsFile
+    {
+        /// <summary>Conditions switched on, each "key=value" from an applies_if entry.</summary>
+        public List<string> conditions_on = new List<string>();
+        /// <summary>Manufacturer values for user_input rules, by rule id, in metres.</summary>
+        public Dictionary<string, float> user_values = new Dictionary<string, float>();
+        /// <summary>Ceiling height above the floor, in metres. Null when not entered.</summary>
+        public float? ceiling_height_m;
+    }
+
     [Preserve]
     public class ModelProfile
     {

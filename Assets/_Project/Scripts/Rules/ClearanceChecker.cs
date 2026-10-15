@@ -40,7 +40,7 @@ namespace ArEnclosure.Rules
         const string k_LogFile = "rule_checks.csv";
         const string k_LogHeader = "check_id,timestamp,verdict,standard,rule_id,level,face,value_source,status," +
                                    "measured_m,required_m,detail,obstacle_count,panel_base_x,panel_base_y,panel_base_z," +
-                                   "panel_yaw_deg,floor_drift_m";
+                                   "panel_yaw_deg,floor_drift_m,conditions_on,ceiling_height_m";
 
         static readonly int k_BaseColor = Shader.PropertyToID("_BaseColor");
         static readonly Face[] k_FloorFaces = { Face.Front, Face.Back, Face.Left, Face.Right };
@@ -53,6 +53,8 @@ namespace ArEnclosure.Rules
         public float? DoorLeafWidthM { get; private set; }
         public ConditionState Conditions { get; } = new ConditionState();
         public Dictionary<string, float> UserValues { get; } = new Dictionary<string, float>();
+        /// <summary>Ceiling height above the floor, entered by the user. Null when not entered.</summary>
+        public float? CeilingHeightM { get; set; }
         public string LogPath => m_Log?.Path;
 
         CsvLog m_Log;
@@ -148,7 +150,7 @@ namespace ArEnclosure.Rules
             }
 
             Last = RuleEngine.Evaluate(Rules, m_Geometry, m_Obstacles != null ? m_Obstacles.Lines : null,
-                DoorLeafWidthM, Conditions, UserValues);
+                DoorLeafWidthM, Conditions, UserValues, CeilingHeightM);
 
             DrawGapLines();
 
@@ -226,6 +228,14 @@ namespace ArEnclosure.Rules
             return lr;
         }
 
+        /// <summary>Switched-on conditions joined with ';' (empty when none).</summary>
+        string ConditionsText()
+        {
+            var on = new List<string>(Conditions.On);
+            on.Sort(System.StringComparer.Ordinal);
+            return string.Join(";", on);
+        }
+
         void HideGapLines()
         {
             foreach (var line in m_GapLines)
@@ -244,6 +254,8 @@ namespace ArEnclosure.Rules
             sig.Append(Last.Verdict).Append('|').Append(obstacleCount).Append('|')
                .Append(Mathf.RoundToInt(baseCentre.x * 100f)).Append(',').Append(Mathf.RoundToInt(baseCentre.z * 100f))
                .Append('|').Append(Mathf.RoundToInt(yaw));
+            sig.Append('|').Append(ConditionsText()).Append('|').Append(CsvLog.Num(CeilingHeightM, "F3"));
+            foreach (var kv in UserValues) sig.Append('|').Append(kv.Key).Append('=').Append(kv.Value.ToString("F3", CsvLog.Ci));
             foreach (var r in Last.Rules)
                 sig.Append('|').Append(r.Status).Append(':').Append(r.MeasuredM.HasValue ? Mathf.RoundToInt(r.MeasuredM.Value * 1000f) : -1);
 
@@ -267,7 +279,8 @@ namespace ArEnclosure.Rules
                     r.Status.ToString(), CsvLog.Num(r.MeasuredM), CsvLog.Num(r.RequiredM), CsvLog.Clean(r.Detail),
                     obstacleCount.ToString(ci),
                     baseCentre.x.ToString("F4", ci), baseCentre.y.ToString("F4", ci), baseCentre.z.ToString("F4", ci),
-                    yaw.ToString("F1", ci), CsvLog.Num(drift)
+                    yaw.ToString("F1", ci), CsvLog.Num(drift),
+                    CsvLog.Clean(ConditionsText()), CsvLog.Num(CeilingHeightM, "F3")
                 }));
             }
             m_Log.AppendRows(rows);

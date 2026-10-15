@@ -51,14 +51,38 @@ namespace ArEnclosure.Rules
     }
 
     /// <summary>
-    /// Conditions a user can switch on. Everything is off by default, so rules
-    /// with applies_if do not run until the matching condition is set.
+    /// Conditions a user has switched on. Each is one applies_if entry from
+    /// rules.json written as "key=value", for example "area=closed_restricted"
+    /// or "gangway_length_gt_m=10" (the user confirms the gangway is longer
+    /// than 10 m). Nothing is named in code, so a new condition in the file is
+    /// a data change only. Everything is off by default, so a rule with
+    /// applies_if does not run until every one of its conditions is switched on.
     /// </summary>
     public class ConditionState
     {
-        public string Area = "";
-        public bool DoorsLockOpen;
-        public float GangwayLengthM;
+        readonly HashSet<string> m_On = new HashSet<string>();
+
+        public IReadOnlyCollection<string> On => m_On;
+
+        public static string Key(string name, JToken value)
+        {
+            var text = value == null ? "" :
+                value.Type == JTokenType.Boolean ? ((bool)value ? "true" : "false") :
+                value.Type == JTokenType.Float || value.Type == JTokenType.Integer
+                    ? ((double)value).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+                    : value.ToString();
+            return name + "=" + text;
+        }
+
+        public bool IsOn(string key) => m_On.Contains(key);
+
+        public void Set(string key, bool on)
+        {
+            if (on) m_On.Add(key);
+            else m_On.Remove(key);
+        }
+
+        public void Clear() => m_On.Clear();
 
         public bool Satisfies(Dictionary<string, JToken> appliesIf, out string missing)
         {
@@ -67,28 +91,9 @@ namespace ArEnclosure.Rules
 
             foreach (var kv in appliesIf)
             {
-                var ok = false;
-                switch (kv.Key)
-                {
-                    case "area":
-                        ok = kv.Value.Type == JTokenType.String && Area == (string)kv.Value;
-                        break;
-                    case "doors_lock_open":
-                        ok = kv.Value.Type == JTokenType.Boolean && DoorsLockOpen == (bool)kv.Value;
-                        break;
-                    case "gangway_length_gt_m":
-                        ok = (kv.Value.Type == JTokenType.Integer || kv.Value.Type == JTokenType.Float) &&
-                             GangwayLengthM > (float)kv.Value;
-                        break;
-                }
-
-                if (!ok)
-                {
-                    // An unknown key is treated as not met, so a new condition
-                    // in the file can never silently switch a rule on.
-                    missing = kv.Key;
-                    return false;
-                }
+                if (m_On.Contains(Key(kv.Key, kv.Value))) continue;
+                missing = kv.Key;
+                return false;
             }
             return true;
         }
@@ -107,7 +112,8 @@ namespace ArEnclosure.Rules
             IReadOnlyList<ObstacleLine> obstacles,
             float? doorLeafWidthM,
             ConditionState conditions,
-            IReadOnlyDictionary<string, float> userValues)
+            IReadOnlyDictionary<string, float> userValues,
+            float? ceilingHeightM = null)
         {
             var result = new CheckResult { Standard = rules?.standard ?? "" };
 
@@ -128,7 +134,7 @@ namespace ArEnclosure.Rules
 
             foreach (var rule in rules.rules)
             {
-                var r = EvaluateRule(rule, geometry, obstacles, doorLeafWidthM, conditions, userValues);
+                var r = EvaluateRule(rule, geometry, obstacles, doorLeafWidthM, conditions, userValues, ceilingHeightM);
                 result.Rules.Add(r);
 
                 var required = rule.level == "required";
@@ -166,7 +172,8 @@ namespace ArEnclosure.Rules
             IReadOnlyList<ObstacleLine> obstacles,
             float? doorLeafWidthM,
             ConditionState conditions,
-            IReadOnlyDictionary<string, float> userValues)
+            IReadOnlyDictionary<string, float> userValues,
+            float? ceilingHeightM)
         {
             var r = new RuleResult { Rule = rule, Faces = FacesFor(rule.face) };
 
@@ -222,14 +229,21 @@ namespace ArEnclosure.Rules
             var gap = new FaceGap { Found = false, Metres = float.PositiveInfinity };
             foreach (var face in r.Faces)
             {
-                var g = geometry.Measure(face, obstacles, accept);
+                // The ceiling is not marked as an obstacle line. The user enters
+                // its height above the floor, and the top gap is that height
+                // minus the panel's own height from the model's bounds.
+                var g = face == Face.Top
+                    ? (ceilingHeightM.HasValue
+                        ? new FaceGap { Found = true, Metres = Mathf.Max(0f, ceilingHeightM.Value - geometry.PanelHeight) }
+                        : new FaceGap { Found = false, Metres = float.PositiveInfinity })
+                    : geometry.Measure(face, obstacles, accept);
                 if (g.Found && g.Metres < gap.Metres) gap = g;
             }
 
             if (!gap.Found)
             {
                 r.Status = RuleStatus.Unknown;
-                r.Detail = r.Faces[0] == Face.Top ? "no ceiling input" : "no obstacle marked on this face";
+                r.Detail = r.Faces[0] == Face.Top ? "ceiling height not entered" : "no obstacle marked on this face";
                 return r;
             }
 

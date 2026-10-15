@@ -57,6 +57,9 @@ namespace ArEnclosure.Rules
             m_FrontLocal = new Vector3(frontLocal.x, 0f, frontLocal.z).normalized;
         }
 
+        /// <summary>Height of the panel's box from the model, base to top.</summary>
+        public float PanelHeight => m_Local.size.y;
+
         public Vector3 OutwardLocal(Face face)
         {
             var front = m_FrontLocal;
