@@ -290,7 +290,7 @@ namespace ArEnclosure.Diagnostics
                 m_Builder.AppendLine("  You are now     " + live.ToString("F2") + " m away");
 
             if (m_WriteCsv)
-                m_Builder.AppendLine("  CSV " + m_CsvPath);
+                m_Builder.AppendLine("  CSV " + Path.GetFileName(m_CsvPath));
         }
 
         bool LiveDistance(out float distance)

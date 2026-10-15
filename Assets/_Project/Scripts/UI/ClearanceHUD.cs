@@ -154,6 +154,9 @@ namespace ArEnclosure.UI
             m_Builder.Append("Obstacles ").Append(m_Obstacles != null ? m_Obstacles.Count : 0)
                 .Append("   Door leaf ")
                 .AppendLine(m_Checker.DoorLeafWidthM.HasValue ? m_Checker.DoorLeafWidthM.Value.ToString("F3") + " m" : "not found");
+            m_Builder.Append("Conditions on ").Append(m_Checker.Conditions.On.Count)
+                .Append("   Ceiling ")
+                .AppendLine(m_Checker.CeilingHeightM.HasValue ? m_Checker.CeilingHeightM.Value.ToString("F3") + " m" : "not entered");
             m_Builder.AppendLine();
 
             foreach (var r in c.Rules)
