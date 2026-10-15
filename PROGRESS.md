@@ -2,6 +2,36 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## Pre-freeze fixes (on branch task-3.5; 3.5 clearance zones skipped for now)
+
+**Status:** built, compiled clean, both fixes checked in Play mode. Waiting for the device test. Once these pass on the device, **the build is frozen for the user study**.
+
+**1. Bug: Reset cleared the panel but not the floor**
+
+- Finding: the Reset code already cleared the floor lock, turned plane finding back on and restarted the search. This was confirmed in Play mode by pressing the real Reset button. But on the device, turning plane finding back on does not remove the planes ARCore already has. So about 2 s after Reset, the same floor (and its merged and reflected planes) was offered again, and if it was the wrong surface it came straight back. Only reopening the app, which starts a new AR session, gave a fresh start.
+- Fix: Reset now behaves like reopening the app. After clearing the panel and the lock, `ARPlacementController.Clear()` calls `ARSession.Reset()`, which removes every plane and anchor and restarts tracking.
+  - The tracking warm-up and the 8 s floor warm-up start again.
+  - Because a restarted session has a new coordinate frame, the new `SessionReset` event makes the obstacle store clear all lines (logged as `reset` in obstacles.csv), the obstacle tool drop a half-marked point, and the measurement tool clear its points.
+  - The setting `m_ResetArSession` (default on) can switch this off.
+- Behaviour change: in Phase A, Reset kept the obstacles. It now clears them, because their positions would be wrong in the new session. Inputs (conditions, vent gaps, ceiling) are kept; only Reset inputs clears those.
+- Play mode check: locked floor, plane finding off, panel placed, one wall marked. After Reset: no panel, no lock, plane finding Horizontal, 0 obstacles, obstacles.csv row `reset`, status "Cleared. Scanning for the floor.", no errors.
+
+**2. Readable rule names in the verdict panel**
+
+- Labels were added in rules.json for the other five rules: "Front gangway", "Handle clearance", "Door swing", "Door fixed open passing", "End wall access" (5 added lines, no values changed). With the three ventilation labels, all 8 rules now have one.
+- The verdict panel shows the label without the "(m)" unit suffix, and falls back to the id. CSVs keep the rule ids, so the logged data is unchanged.
+- Play mode check: the verdict panel read "Front gangway PASS", "Handle clearance PASS", "Door swing PASS", "Door fixed open passing n/a", "End wall access n/a", and "Back/Side/Top ventilation gap not entered".
+
+**How to test on the phone**
+
+1. Confirm a floor, place the panel, mark a wall and take a measurement.
+2. Press Reset. The panel, floor, wall line and measurement points should all disappear, and the plane dots should be gone. The status should read "Scanning for the floor". After about 8 s, a new floor should be offered on fresh planes, without reopening the app.
+3. Confirm and place again. Re-seat, drift, drag and the verdict should work as before. The inputs (conditions, ceiling) should still be set.
+4. The verdict panel should show readable names. Take the thesis screenshots from this build.
+5. obstacles.csv should have a `reset` row at the time of the Reset.
+
+**Files touched:** `Placement/ARPlacementController.cs`, `Obstacles/ObstacleSet.cs`, `Obstacles/ObstacleTool.cs`, `Measurement/MeasurementTool.cs`, `UI/ClearanceHUD.cs`, `StreamingAssets/rules.json`.
+
 ## 3.2 to 3.4 Phase B
 
 **Status:** device test passed on the Pixel 9a on 2026-10-15. The label fix was checked in the Editor. Merged and tagged `task-3.4b`.
@@ -15,8 +45,8 @@ AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
   - with 2 conditions on, door_fixed_open_passing ran (unknown with no front wall);
   - inputs were kept after a restart, and Reset inputs cleared them.
 - Step 9 (Debug layout): passed. The readout no longer runs under the verdict panel.
-- Step 1 (Move ring here): not reported (the report kept the template text). Still unconfirmed.
-- Data note: obstacle 1 at 15:31:57 in obstacles.csv sits at y = -0.457 m, against -1.11 to -1.37 m for the other obstacles that day. That session's confirmed floor was probably a raised surface (table or bed), so leave it out of the thesis data.
+- Step 1 (Move ring here): **found and works**, confirmed by the user. This closes the open 3.2b item.
+- Data note: obstacle 1 at 15:31:57 in obstacles.csv sits at y = -0.457 m, against -1.11 to -1.37 m for the other obstacles that day. That session's confirmed floor was probably a raised surface (table or bed). **Excluded from the thesis data** (agreed 2026-10-15).
 - The verdict panel and measurement result were moved down about 64 px in the scene (to y = -104 and -114), clear of the phone's status bar. Kept.
 
 **Fix before merge: readable input labels**
@@ -69,7 +99,7 @@ Play mode: the panel built 3 toggles and 4 fields from rules.json. Using the con
 
 **Known issues**
 
-- The verdict panel still lists rules by id (for example `vent_gap_back`). Only the Inputs panel uses the labels.
+- The verdict panel listed rules by id (fixed in the pre-freeze fixes).
 - The end wall check uses the nearest wall on either side.
 
 **Decisions already made (2026-10-14)**
