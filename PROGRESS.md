@@ -2,6 +2,18 @@
 
 AR Enclosure, Coventry University BSc dissertation artefact. Newest task first.
 
+## 3.8 README and submission release
+
+**Status:** README.md written. The submission release is tagged `v1.0-submission`. No code, scene, asset or rules changes, so the build is identical to `user-study-freeze`.
+
+- `README.md` in the repo root covers:
+  - summary, features and requirements;
+  - how to open and build, and how to use it;
+  - data files with the adb pull command;
+  - rules as data, design decisions and scope, and known limitations;
+  - version history (all tags) and the note on AI assistance.
+- It is written only from the repo, this log and the Git tags. The model is described as a representative low voltage enclosure model, used with permission for academic purposes only. The standard's values are paraphrased, not quoted.
+
 ## BUILD FROZEN for the user study (2026-10-15)
 
 The user-study build is the `master` commit tagged **`user-study-freeze`**, which merges the UI polish (`task-ui-polish`) on top of all earlier tasks. It was tested on the Pixel 9a.
